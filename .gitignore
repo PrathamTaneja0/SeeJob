@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+ENV/
+
+# Environment and secrets
+.env
+.env.local
+*.pem
+credentials.json
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Generated documents
+generated/
+output/pdfs/
+*.pdf
+
+# Browser automation profiles
+browser_profiles/
+playwright/.cache/
+.playwright/
+
+# Reference materials (user-provided zips/resumes)
+reference/*
+!reference/.gitkeep
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Chroma / vector store
+chroma_data/
+.chroma/
+
+# Docker
+docker-compose.override.yml
