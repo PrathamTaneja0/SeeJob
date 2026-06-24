@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 from seejob.core.dependencies import get_session
 from seejob.models.application import Application, ApplicationStatus, GeneratedDocument
 from seejob.schemas.application import (
+    ApplicationApplyResponse,
     ApplicationDocumentsView,
     ApplicationPipelineView,
     ApplicationRead,
@@ -17,8 +18,9 @@ from seejob.schemas.application import (
     DocumentGenerationResponse,
     GeneratedDocumentRead,
 )
-from seejob.services.documents import DocumentGenerationError, queue_document_generation
+from seejob.services.apply import ApplyError, run_application_apply
 from seejob.services.approval import ApprovalGateError, validate_approval_gates
+from seejob.services.documents import DocumentGenerationError, queue_document_generation
 from seejob.services.policy import get_policy_config
 from seejob.services.state_machine import InvalidTransitionError, transition
 
@@ -210,3 +212,36 @@ def approve_document(
     db.commit()
     db.refresh(doc)
     return doc
+
+
+@router.post("/{application_id}/apply", response_model=ApplicationApplyResponse)
+async def apply_application(
+    application_id: int,
+    dry_run: bool = Query(default=True),
+    submit_approved: bool = Query(default=False),
+    db: Session = Depends(get_session),
+) -> ApplicationApplyResponse:
+    """Run browser form fill for an application (dry_run skips submit)."""
+    try:
+        result = await run_application_apply(
+            db,
+            application_id,
+            dry_run=dry_run,
+            submit_approved=submit_approved,
+        )
+    except ApprovalGateError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ApplyError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    return ApplicationApplyResponse(
+        application_id=result.application_id,
+        status=result.status,
+        result=result.result.value,
+        fields_filled=result.fields_filled,
+        message=result.message,
+        screenshot_path=result.screenshot_path,
+        page_url=result.page_url,
+        dry_run=result.dry_run,
+        submitted=result.submitted,
+    )

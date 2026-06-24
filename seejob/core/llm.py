@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from seejob.agents.answer_generator import AnswerGenerator, OpenAIAnswerGenerator
 from seejob.agents.document_generator import DocumentGenerator, OpenAIDocumentGenerator
 from seejob.agents.profile_extractor import OpenAIProfileExtractor, ProfileExtractor
 from seejob.core.config import Settings, get_settings
 from seejob.core.exceptions import LLMUnavailableError
+
+if TYPE_CHECKING:
+    from seejob.browser.field_mapper import FieldMapper
 
 logger = logging.getLogger(__name__)
 
@@ -75,10 +79,32 @@ def resolve_document_generator(
     if cfg.openai_api_key:
         return OpenAIDocumentGenerator(cfg)
 
-    if cfg.allow_mock_llm:
+    if cfg.can_use_mock_llm:
         from seejob.agents.document_generator import MockDocumentGenerator
 
         logger.warning("Using MockDocumentGenerator (SEEJOB_ALLOW_MOCK_LLM=true)")
         return MockDocumentGenerator()
+
+    raise LLMUnavailableError(_MISSING_KEY_MESSAGE)
+
+
+def resolve_field_mapper(
+    mapper: FieldMapper | None = None,
+    *,
+    settings: Settings | None = None,
+) -> FieldMapper:
+    """Return injected mapper, OpenAI mapper, or dev-only mock."""
+    from seejob.browser.field_mapper import MockFieldMapper, OpenAIFieldMapper
+
+    if mapper is not None:
+        return mapper
+
+    cfg = settings or get_settings()
+    if cfg.openai_api_key:
+        return OpenAIFieldMapper(cfg)
+
+    if cfg.allow_mock_llm:
+        logger.warning("Using MockFieldMapper (SEEJOB_ALLOW_MOCK_LLM=true)")
+        return MockFieldMapper()
 
     raise LLMUnavailableError(_MISSING_KEY_MESSAGE)

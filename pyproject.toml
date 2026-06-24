@@ -28,6 +28,7 @@ authors = [{ name = "SeeJob" }]
     "readability-lxml>=0.8.1",
     "lxml>=5.0.0",
     "reportlab>=4.2.0",
+    "playwright>=1.49.0",
 ]
 
 [project.optional-dependencies]

@@ -77,3 +77,17 @@ class DocumentGenerationResponse(BaseModel):
     status: ApplicationStatus
     documents: list[GeneratedDocumentRead]
     message: str | None = None
+
+
+class ApplicationApplyResponse(BaseModel):
+    """Response after browser apply orchestration."""
+
+    application_id: int
+    status: ApplicationStatus
+    result: str
+    fields_filled: int
+    message: str | None = None
+    screenshot_path: str | None = None
+    page_url: str | None = None
+    dry_run: bool
+    submitted: bool = False

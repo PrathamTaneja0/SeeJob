@@ -46,6 +46,8 @@ output/pdfs/
 
 # Browser automation profiles
 browser_profiles/
+seejob/data/browser_profiles/
+seejob/data/artifacts/
 playwright/.cache/
 .playwright/
 

@@ -18,7 +18,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    env: Literal["development", "staging", "production"] = "development"
+    env: Literal["development", "test", "staging", "production"] = "development"
     debug: bool = False
     secret_key: str = Field(min_length=16, default="dev-secret-change-me")
 
@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
 
     documents_dir: Path = Path("./generated/documents")
-    browser_profiles_dir: Path = Path("./browser_profiles")
+    browser_profiles_dir: Path = Path("seejob/data/browser_profiles")
 
     default_daily_apply_limit: int = 10
 
@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     def is_sqlite(self) -> bool:
         """Return True when using SQLite (dev default)."""
         return self.database_url.startswith("sqlite")
+
+    @property
+    def can_use_mock_llm(self) -> bool:
+        """Mock LLM only when explicitly enabled in development or test."""
+        return self.allow_mock_llm and self.env in ("development", "test")
 
     def ensure_directories(self) -> None:
         """Create runtime directories if they do not exist."""

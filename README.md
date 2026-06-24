@@ -13,7 +13,7 @@ SeeJob separates orchestration (planning, scoring, document generation, policy) 
 | No 24/7 initially | Scheduled sourcing via cron (SourcingWorker) |
 | Approval before submit | require_doc_approval + require_submit_approval in PolicyConfig |
 | Q&A bank caching | ScreeningAnswer.question_hash (SHA-256 of normalized question) |
-| ATS session persistence | SiteAccount.session_data_encrypted + browser_profiles/ |
+| ATS session persistence | SiteAccount.session_data_encrypted + seejob/data/browser_profiles/ |
 | Rate limits per platform | PolicyConfig.rate_limits_json |
 | Truthfulness guard | TruthfulnessConstraint in agents — no fabricated experience |
 | Human-in-the-loop | needs_manual state for captcha / manual intervention |
@@ -42,6 +42,9 @@ python -m venv .venv
 .venv\Scripts\activate
 
 pip install -e ".[dev]"
+
+# Playwright browser (required for form fill)
+playwright install chromium
 
 cp .env.example .env
 
@@ -81,7 +84,7 @@ seejob/
   schemas/      # Pydantic schemas
   services/     # business logic
   workers/      # scheduled jobs
-  browser/      # automation interfaces (Phase 2)
+  browser/      # Playwright actuator (Phase 4)
   agents/       # orchestration interfaces (Phase 1)
 tests/
 .cursor/skills/seejob-automation/
