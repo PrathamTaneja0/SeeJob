@@ -90,6 +90,49 @@ seejob-tick --person-id 1        # score ingested jobs for person 1
 - **Interrupts**: captcha/login pauses set `needs_manual` / `auth_required`; resume via `POST /api/v1/applications/{id}/resume`
 - **Events**: `GET /api/v1/events` (poll) or `GET /api/v1/events/stream` (SSE) for dashboard feed
 
+## Dashboard (Phase 6)
+
+React control UI in `dashboard/` — pipeline kanban, job queue, application detail, profiles, settings, and live agent console.
+
+### Dev (API + Vite)
+
+Terminal 1 — API:
+
+```bash
+seejob
+```
+
+Terminal 2 — dashboard (proxies `/api` to `:8000`):
+
+```bash
+cd dashboard
+npm install
+npm run dev
+```
+
+Open http://localhost:5173
+
+Optional: set `VITE_API_URL=http://127.0.0.1:8000` in `dashboard/.env` to call the API directly (CORS is enabled for `:5173`).
+
+### Production build
+
+```bash
+cd dashboard
+npm run build
+seejob   # serves dashboard/dist at / when present
+```
+
+Then open http://127.0.0.1:8000/
+
+### Dashboard scripts
+
+| Command | Purpose |
+|---------|---------|
+| `npm run dev` | Vite dev server on :5173 |
+| `npm run build` | Typecheck + production bundle to `dist/` |
+| `npm run test` | Vitest component smoke tests |
+| `npm run preview` | Preview production build locally |
+
 
 ## Workers (scheduled, not 24/7)
 
@@ -129,6 +172,7 @@ seejob/
   browser/      # Playwright actuator (Phase 4)
   agents/       # orchestration interfaces (Phase 1)
 tests/
+dashboard/    # React control UI (Phase 6)
 .cursor/skills/seejob-automation/
 reference/      # gitignored
 alembic/
@@ -154,6 +198,11 @@ alembic/
 - Per-platform daily rate limits via `AgentRun` audit log
 - Interrupt/resume flow for captcha and auth
 - SSE event stream for dashboard
+
+### Phase 6 (current)
+- React control dashboard (`dashboard/`) — Vite + TanStack Query + Tailwind
+- Pipeline kanban, job queue, application detail, profiles, settings, agent console
+- FastAPI serves `dashboard/dist` at `/` when built; CORS for local dev
 
 
 ## Security

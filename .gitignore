@@ -69,5 +69,9 @@ Thumbs.db
 chroma_data/
 .chroma/
 
+# Node / dashboard
+node_modules/
+dashboard/node_modules/
+
 # Docker
 docker-compose.override.yml

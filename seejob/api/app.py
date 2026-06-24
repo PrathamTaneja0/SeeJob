@@ -2,15 +2,20 @@
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from seejob import __version__
 from seejob.api.routes import applications, events, health, jobs, policy, profiles
 from seejob.core.config import get_settings
 from seejob.core.database import engine
 from seejob.models.base import Base
+
+_DASHBOARD_DIST = Path(__file__).resolve().parents[2] / "dashboard" / "dist"
 
 
 @asynccontextmanager
@@ -54,6 +59,27 @@ def create_app() -> FastAPI:
     app.include_router(applications.router, prefix="/api/v1/applications", tags=["applications"])
     app.include_router(events.router, prefix="/api/v1/events", tags=["events"])
     app.include_router(policy.router, prefix="/api/v1/policy", tags=["policy"])
+
+    if _DASHBOARD_DIST.is_dir():
+        assets_dir = _DASHBOARD_DIST / "assets"
+        if assets_dir.is_dir():
+            app.mount("/assets", StaticFiles(directory=assets_dir), name="dashboard-assets")
+
+        @app.get("/", include_in_schema=False)
+        async def dashboard_index() -> FileResponse:
+            return FileResponse(_DASHBOARD_DIST / "index.html")
+
+        @app.get("/{full_path:path}", include_in_schema=False)
+        async def dashboard_spa(full_path: str) -> FileResponse:
+            """Serve dashboard SPA; unknown paths fall back to index.html."""
+            if full_path.startswith("api/") or full_path in ("docs", "redoc", "openapi.json", "health"):
+                from fastapi import HTTPException
+
+                raise HTTPException(status_code=404)
+            candidate = _DASHBOARD_DIST / full_path
+            if candidate.is_file():
+                return FileResponse(candidate)
+            return FileResponse(_DASHBOARD_DIST / "index.html")
 
     return app
 
