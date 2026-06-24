@@ -149,3 +149,32 @@ def test_duplicate_application_constraint(db_session) -> None:
         raise AssertionError("Expected IntegrityError for duplicate application")
     except IntegrityError:
         db_session.rollback()
+
+
+def test_resume_endpoint_clears_interrupt(client, db_session) -> None:
+    """POST /resume transitions needs_manual back to filling."""
+    _seed_policy(db_session)
+    app = _seed_application(db_session, status=ApplicationStatus.NEEDS_MANUAL, doc_approved=True)
+    app.interrupt_metadata_json = '{"reason": "captcha"}'
+    app.status_message = "Captcha detected"
+    db_session.commit()
+
+    response = client.post(
+        f"/api/v1/applications/{app.id}/resume",
+        json={"note": "Captcha solved manually"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "filling"
+    assert data["interrupt_metadata_json"] is None
+    assert "Captcha solved" in (data["status_message"] or "")
+
+
+def test_resume_endpoint_rejects_wrong_status(client, db_session) -> None:
+    """Resume is only valid from interrupt states."""
+    _seed_policy(db_session)
+    app = _seed_application(db_session, status=ApplicationStatus.DOCS_READY, doc_approved=True)
+
+    response = client.post(f"/api/v1/applications/{app.id}/resume")
+    assert response.status_code == 409
+

@@ -45,6 +45,7 @@ embeddings = [
 [project.scripts]
 seejob = "seejob.api.app:main"
 seejob-sourcing = "seejob.workers.sourcing:main"
+seejob-tick = "seejob.workers.scheduler:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["seejob"]

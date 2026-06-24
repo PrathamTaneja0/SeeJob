@@ -32,4 +32,5 @@ class PolicyConfig(Base, TimestampMixin):
     blocked_keywords_json: Mapped[str | None] = mapped_column(Text)
     sourcing_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     sourcing_schedule: Mapped[str] = mapped_column(String(100), default="0 8 * * *", nullable=False)
+    sourcing_interval_minutes: Mapped[int] = mapped_column(Integer, default=60, nullable=False)
     rss_feeds_json: Mapped[str | None] = mapped_column(Text)

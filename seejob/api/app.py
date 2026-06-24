@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from seejob import __version__
-from seejob.api.routes import applications, health, jobs, policy, profiles
+from seejob.api.routes import applications, events, health, jobs, policy, profiles
 from seejob.core.config import get_settings
 from seejob.core.database import engine
 from seejob.models.base import Base
@@ -52,6 +52,7 @@ def create_app() -> FastAPI:
     app.include_router(profiles.router, prefix="/api/v1/profiles", tags=["profiles"])
     app.include_router(jobs.router, prefix="/api/v1/jobs", tags=["jobs"])
     app.include_router(applications.router, prefix="/api/v1/applications", tags=["applications"])
+    app.include_router(events.router, prefix="/api/v1/events", tags=["events"])
     app.include_router(policy.router, prefix="/api/v1/policy", tags=["policy"])
 
     return app

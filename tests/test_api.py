@@ -50,3 +50,19 @@ def test_duplicate_email_returns_409(client) -> None:
     second = client.post("/api/v1/profiles", json=payload)
     assert second.status_code == 409
     assert "already registered" in second.json()["detail"]
+
+
+def test_events_polling_endpoint(client) -> None:
+    """Events API returns emitted orchestrator events."""
+    from seejob.services.events import clear_events, emit_event
+
+    clear_events()
+    emit_event("test_event", "hello", worker_name="test")
+
+    response = client.get("/api/v1/events")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) >= 1
+    assert data[-1]["event_type"] == "test_event"
+    assert data[-1]["message"] == "hello"
+

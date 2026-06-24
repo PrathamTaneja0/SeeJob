@@ -33,6 +33,7 @@ class ApplicationRead(BaseModel):
     job_id: int
     status: ApplicationStatus
     status_message: str | None
+    interrupt_metadata_json: str | None = None
     platform: str | None
     submitted_at: str | None
     created_at: datetime
@@ -91,3 +92,20 @@ class ApplicationApplyResponse(BaseModel):
     page_url: str | None = None
     dry_run: bool
     submitted: bool = False
+
+
+class ApplicationResumeRequest(BaseModel):
+    """Optional note when resuming from an interrupt."""
+
+    note: str | None = None
+
+
+class ApplicationResumeResponse(BaseModel):
+    """Response after resuming from needs_manual or auth_required."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    status: ApplicationStatus
+    status_message: str | None
+    interrupt_metadata_json: str | None = None

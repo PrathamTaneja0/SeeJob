@@ -14,6 +14,7 @@ from seejob.browser.interfaces import BrowserActionResult
 from seejob.models.application import Application, ApplicationStatus
 from seejob.models.policy import PolicyConfig
 from seejob.services.approval import ApprovalGateError, validate_approval_gates
+from seejob.services.interrupts import set_interrupt
 from seejob.services.policy import get_policy_config
 from seejob.services.state_machine import InvalidTransitionError, transition
 
@@ -82,8 +83,16 @@ async def run_application_apply(
         await browser.close()
 
     if fill_result.result in (BrowserActionResult.CAPTCHA, BrowserActionResult.NEEDS_MANUAL):
-        app.status = transition(app.status, ApplicationStatus.NEEDS_MANUAL)
-        app.status_message = fill_result.message
+        set_interrupt(
+            app,
+            ApplicationStatus.NEEDS_MANUAL,
+            {
+                "reason": fill_result.result.value,
+                "screenshot_path": fill_result.screenshot_path,
+                "page_url": fill_result.page_url,
+            },
+            message=fill_result.message,
+        )
         db.commit()
         return ApplyResult(
             application_id=application_id,
@@ -97,8 +106,16 @@ async def run_application_apply(
         )
 
     if fill_result.result == BrowserActionResult.AUTH_REQUIRED:
-        app.status = transition(app.status, ApplicationStatus.AUTH_REQUIRED)
-        app.status_message = fill_result.message
+        set_interrupt(
+            app,
+            ApplicationStatus.AUTH_REQUIRED,
+            {
+                "reason": "auth_required",
+                "screenshot_path": fill_result.screenshot_path,
+                "page_url": fill_result.page_url,
+            },
+            message=fill_result.message,
+        )
         db.commit()
         return ApplyResult(
             application_id=application_id,

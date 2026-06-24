@@ -13,6 +13,8 @@ from seejob.schemas.application import (
     ApplicationDocumentsView,
     ApplicationPipelineView,
     ApplicationRead,
+    ApplicationResumeRequest,
+    ApplicationResumeResponse,
     ApplicationStatusUpdate,
     DocumentApproveUpdate,
     DocumentGenerationResponse,
@@ -21,6 +23,7 @@ from seejob.schemas.application import (
 from seejob.services.apply import ApplyError, run_application_apply
 from seejob.services.approval import ApprovalGateError, validate_approval_gates
 from seejob.services.documents import DocumentGenerationError, queue_document_generation
+from seejob.services.interrupts import InterruptError, resume_from_interrupt
 from seejob.services.policy import get_policy_config
 from seejob.services.state_machine import InvalidTransitionError, transition
 
@@ -212,6 +215,28 @@ def approve_document(
     db.commit()
     db.refresh(doc)
     return doc
+
+
+@router.post("/{application_id}/resume", response_model=ApplicationResumeResponse)
+def resume_application(
+    application_id: int,
+    data: ApplicationResumeRequest | None = None,
+    db: Session = Depends(get_session),
+) -> Application:
+    """Resume pipeline after manual captcha solve or authentication."""
+    app = db.scalar(
+        select(Application)
+        .where(Application.id == application_id)
+        .options(selectinload(Application.documents))
+    )
+    if app is None:
+        raise HTTPException(status_code=404, detail=f"Application {application_id} not found")
+
+    note = data.note if data else None
+    try:
+        return resume_from_interrupt(db, app, note=note)
+    except InterruptError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 @router.post("/{application_id}/apply", response_model=ApplicationApplyResponse)

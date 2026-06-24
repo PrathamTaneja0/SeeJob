@@ -31,6 +31,7 @@ def _default_policy() -> PolicyConfig:
         blocked_keywords_json="[]",
         sourcing_enabled=True,
         sourcing_schedule="0 8 * * *",
+        sourcing_interval_minutes=60,
     )
 
 
@@ -50,6 +51,7 @@ def _to_read(policy: PolicyConfig) -> PolicyConfigRead:
         blocked_keywords=PolicyConfigDBFields.loads_list(policy.blocked_keywords_json),
         sourcing_enabled=policy.sourcing_enabled,
         sourcing_schedule=policy.sourcing_schedule,
+        sourcing_interval_minutes=policy.sourcing_interval_minutes,
         rss_feeds=PolicyConfigDBFields.loads_list(policy.rss_feeds_json),
         created_at=policy.created_at,
         updated_at=policy.updated_at,

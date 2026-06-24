@@ -54,6 +54,7 @@ class Application(Base, TimestampMixin):
         index=True,
     )
     status_message: Mapped[str | None] = mapped_column(Text)
+    interrupt_metadata_json: Mapped[str | None] = mapped_column(Text)
     platform: Mapped[str | None] = mapped_column(String(100))
     submitted_at: Mapped[str | None] = mapped_column(String(50))
 

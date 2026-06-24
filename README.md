@@ -72,7 +72,49 @@ Add to .env as SEEJOB_FERNET_KEY=...
 pytest
 ruff check seejob tests
 alembic upgrade head
+seejob-tick --skip-sourcing   # one scheduler tick (pipeline queue only)
+seejob-tick --dry-run         # sourcing + pipeline without form submit
 ```
+
+### Scheduler (Phase 5)
+
+The orchestrator advances approved applications through document generation and browser apply on each tick — not as a 24/7 daemon. Configure cron or run manually:
+
+```bash
+seejob-tick                      # sourcing pass + pipeline queue
+seejob-tick --skip-sourcing      # pipeline queue only
+seejob-tick --person-id 1        # score ingested jobs for person 1
+```
+
+- **Rate limits**: `PolicyConfig.rate_limits_json` caps applies per platform per UTC day
+- **Interrupts**: captcha/login pauses set `needs_manual` / `auth_required`; resume via `POST /api/v1/applications/{id}/resume`
+- **Events**: `GET /api/v1/events` (poll) or `GET /api/v1/events/stream` (SSE) for dashboard feed
+
+
+## Workers (scheduled, not 24/7)
+
+SeeJob workers are **single-tick** CLIs meant for cron or Task Scheduler — not always-on daemons.
+
+| Command | Purpose |
+|---------|---------|
+| `seejob-sourcing` | One sourcing pass: poll RSS/API sources, ingest and score jobs |
+| `seejob-tick` | Full scheduler tick: sourcing + approved pipeline queue (doc gen + apply) |
+
+Configure cadence via `PolicyConfig.sourcing_interval_minutes` (default 60). Example cron (every hour):
+
+```bash
+0 * * * * cd /path/to/SeeJob && .venv/bin/seejob-tick
+```
+
+`seejob-tick` flags:
+
+- `--person-id N` — score ingested jobs for a specific profile
+- `--dry-run` — fill forms without submitting
+- `--skip-sourcing` — only process the approved applications pipeline queue
+
+Pipeline orchestration lives in `seejob/services/pipeline.py`. Rate limits are enforced per platform per day via `AgentRun` audit rows. Interrupt states (`needs_manual`, `auth_required`) store JSON metadata on the application; resume with `POST /api/v1/applications/{id}/resume`.
+
+Agent events stream at `GET /api/v1/events/stream` (SSE) for dashboard integration.
 
 ## Project structure
 
@@ -105,6 +147,14 @@ alembic/
 
 ### Phase 3
 - PostgreSQL, Docker Compose, dashboard UI
+
+### Phase 5 (current)
+- Pipeline orchestrator (`run_pipeline_for_application`)
+- Scheduled worker (`seejob-tick`) — sourcing + approved queue per tick
+- Per-platform daily rate limits via `AgentRun` audit log
+- Interrupt/resume flow for captcha and auth
+- SSE event stream for dashboard
+
 
 ## Security
 

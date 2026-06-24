@@ -54,6 +54,7 @@ class PolicyConfigRead(BaseModel):
     blocked_keywords: list[str]
     sourcing_enabled: bool
     sourcing_schedule: str
+    sourcing_interval_minutes: int = 60
     rss_feeds: list[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
@@ -74,6 +75,7 @@ class PolicyConfigUpdate(BaseModel):
     blocked_keywords: list[str] | None = None
     sourcing_enabled: bool | None = None
     sourcing_schedule: str | None = None
+    sourcing_interval_minutes: int | None = Field(default=None, ge=1)
     rss_feeds: list[str] | None = None
 
 
