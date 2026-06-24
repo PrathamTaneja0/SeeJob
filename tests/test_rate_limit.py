@@ -11,6 +11,7 @@ from seejob.services.rate_limit import (
     count_applies_today,
     get_rate_limit_status,
     record_apply_run,
+    reserve_apply_slot,
 )
 
 
@@ -103,3 +104,14 @@ def test_other_platforms_remain_allowed(db_session) -> None:
     status = check_rate_limit(db_session, "workday")
     assert status.allowed
     assert status.limit == 3
+
+
+def test_reserve_apply_slot_counts_pending_toward_cap(db_session) -> None:
+    _seed_policy(db_session, rate_limits_json='{"greenhouse": 1}')
+    reserve_apply_slot(db_session, application_id=1, platform="greenhouse")
+    db_session.commit()
+
+    assert count_applies_today(db_session, platform="greenhouse") == 1
+
+    with pytest.raises(RateLimitExceeded):
+        reserve_apply_slot(db_session, application_id=2, platform="greenhouse")

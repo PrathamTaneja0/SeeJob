@@ -16,9 +16,15 @@ from seejob.models.policy import PolicyConfig
 from seejob.services.approval import ApprovalGateError, validate_approval_gates
 from seejob.services.interrupts import set_interrupt
 from seejob.services.policy import get_policy_config
+from seejob.services.rate_limit import (
+    finalize_apply_run,
+    reserve_apply_slot,
+)
 from seejob.services.state_machine import InvalidTransitionError, transition
 
 logger = logging.getLogger(__name__)
+
+AWAITING_SUBMIT_APPROVAL_MESSAGE = "Form filled; awaiting submit approval"
 
 
 class ApplyError(ValueError):
@@ -38,6 +44,23 @@ class ApplyResult:
     page_url: str | None
     dry_run: bool
     submitted: bool = False
+
+
+def _resolve_platform(app: Application) -> str:
+    if app.platform:
+        return app.platform.lower()
+    if app.job and app.job.source:
+        return app.job.source.lower()
+    return "default"
+
+
+def is_awaiting_submit_approval(app: Application, policy: PolicyConfig) -> bool:
+    """Return True when form fill finished but submit approval is still required."""
+    if app.status != ApplicationStatus.FILLING:
+        return False
+    if not policy.require_submit_approval:
+        return False
+    return app.status_message == AWAITING_SUBMIT_APPROVAL_MESSAGE
 
 
 async def run_application_apply(
@@ -64,11 +87,23 @@ async def run_application_apply(
     policy = get_policy_config(db)
     _validate_apply_gates(app, policy, dry_run=dry_run, submit_approved=submit_approved)
 
+    platform = _resolve_platform(app)
+    apply_run = None
+    if not dry_run:
+        apply_run = reserve_apply_slot(
+            db,
+            application_id=application_id,
+            platform=platform,
+        )
+
     if app.status != ApplicationStatus.FILLING:
         try:
             app.status = transition(app.status, ApplicationStatus.FILLING)
             db.commit()
         except InvalidTransitionError as exc:
+            if apply_run is not None:
+                finalize_apply_run(db, apply_run, success=False, message=str(exc))
+                db.commit()
             raise ApplyError(str(exc)) from exc
 
     browser = actuator or PlaywrightActuator()
@@ -79,8 +114,17 @@ async def run_application_apply(
             dry_run=dry_run,
             submit=not dry_run and submit_approved,
         )
+    except Exception as exc:
+        if apply_run is not None:
+            finalize_apply_run(db, apply_run, success=False, message=str(exc))
+            db.commit()
+        raise
     finally:
         await browser.close()
+
+    def _finalize_apply_run(*, success: bool, message: str | None) -> None:
+        if apply_run is not None:
+            finalize_apply_run(db, apply_run, success=success, message=message)
 
     if fill_result.result in (BrowserActionResult.CAPTCHA, BrowserActionResult.NEEDS_MANUAL):
         set_interrupt(
@@ -93,6 +137,7 @@ async def run_application_apply(
             },
             message=fill_result.message,
         )
+        _finalize_apply_run(success=False, message=fill_result.message)
         db.commit()
         return ApplyResult(
             application_id=application_id,
@@ -116,6 +161,7 @@ async def run_application_apply(
             },
             message=fill_result.message,
         )
+        _finalize_apply_run(success=False, message=fill_result.message)
         db.commit()
         return ApplyResult(
             application_id=application_id,
@@ -130,6 +176,7 @@ async def run_application_apply(
 
     if fill_result.result == BrowserActionResult.FAILED:
         app.status_message = fill_result.message
+        _finalize_apply_run(success=False, message=fill_result.message)
         db.commit()
         return ApplyResult(
             application_id=application_id,
@@ -159,11 +206,17 @@ async def run_application_apply(
             app.status_message = str(exc)
     elif not dry_run:
         if policy.require_submit_approval:
-            app.status_message = "Form filled; awaiting submit approval"
+            app.status_message = AWAITING_SUBMIT_APPROVAL_MESSAGE
         else:
             app.status_message = fill_result.message
     else:
         app.status_message = fill_result.message or "Dry run complete"
+
+    attempt_success = fill_result.result == BrowserActionResult.SUCCESS
+    _finalize_apply_run(
+        success=attempt_success,
+        message=app.status_message,
+    )
 
     db.commit()
     db.refresh(app)

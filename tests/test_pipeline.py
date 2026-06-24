@@ -18,12 +18,15 @@ from seejob.models.job import Job, JobStatus
 from seejob.models.person import Person, WorkAuthorization
 from seejob.models.policy import PolicyConfig
 from seejob.services.events import clear_events, list_events
+from seejob.services.apply import AWAITING_SUBMIT_APPROVAL_MESSAGE
 from seejob.services.pipeline import (
     PipelineAction,
     find_pipeline_candidates,
+    has_active_pipeline_claim,
     run_pipeline_for_application,
+    try_claim_pipeline_application,
 )
-from seejob.services.rate_limit import RateLimitExceeded, check_rate_limit, record_apply_run
+from seejob.services.rate_limit import RateLimitExceeded, check_rate_limit, record_apply_run, reserve_apply_slot
 
 
 def _seed_policy(db_session, **overrides) -> PolicyConfig:
@@ -214,4 +217,62 @@ def test_rate_limit_blocks_after_cap(db_session) -> None:
 
     status = check_rate_limit(db_session, "linkedin")
     assert status.allowed
+
+
+def test_find_pipeline_candidates_excludes_filling_awaiting_submit(db_session) -> None:
+    policy = _seed_policy(db_session, auto_apply=True, require_submit_approval=True)
+    awaiting = _seed_app(db_session, status=ApplicationStatus.FILLING, doc_approved=True)
+    awaiting.status_message = AWAITING_SUBMIT_APPROVAL_MESSAGE
+    resumed = _seed_app(db_session, status=ApplicationStatus.FILLING, doc_approved=True)
+    resumed.status_message = "Resumed after manual intervention"
+    db_session.commit()
+
+    candidates = find_pipeline_candidates(db_session, policy)
+    ids = {a.id for a in candidates}
+    assert awaiting.id not in ids
+    assert resumed.id in ids
+
+
+def test_find_pipeline_candidates_excludes_active_pipeline_claim(db_session) -> None:
+    policy = _seed_policy(db_session, auto_apply=True, require_doc_approval=False)
+    app = _seed_app(db_session, status=ApplicationStatus.DOCS_READY, doc_approved=True)
+    assert try_claim_pipeline_application(db_session, app.id) is True
+    db_session.commit()
+
+    candidates = find_pipeline_candidates(db_session, policy)
+    assert app.id not in {a.id for a in candidates}
+
+
+def test_try_claim_pipeline_application_prevents_overlap(db_session) -> None:
+    app = _seed_app(db_session, status=ApplicationStatus.DOCS_READY, doc_approved=True)
+    assert try_claim_pipeline_application(db_session, app.id) is True
+    assert try_claim_pipeline_application(db_session, app.id) is False
+    db_session.refresh(app)
+    assert has_active_pipeline_claim(app) is True
+
+
+@pytest.mark.asyncio
+async def test_pipeline_skips_when_claim_held(db_session) -> None:
+    _seed_policy(db_session, require_doc_approval=False)
+    app = _seed_app(db_session, status=ApplicationStatus.DOCS_READY, doc_approved=True)
+    assert try_claim_pipeline_application(db_session, app.id) is True
+    db_session.commit()
+
+    result = await run_pipeline_for_application(db_session, app.id, dry_run=True)
+    assert result.action == PipelineAction.SKIPPED
+    assert "locked" in (result.message or "").lower()
+
+
+def test_reserve_apply_slot_blocks_when_cap_reached(db_session) -> None:
+    _seed_policy(db_session, rate_limits_json='{"greenhouse": 1}')
+    record_apply_run(
+        db_session,
+        application_id=1,
+        platform="greenhouse",
+        success=True,
+    )
+    db_session.commit()
+
+    with pytest.raises(RateLimitExceeded):
+        reserve_apply_slot(db_session, application_id=2, platform="greenhouse")
 

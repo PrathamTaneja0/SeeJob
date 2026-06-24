@@ -178,3 +178,20 @@ def test_resume_endpoint_rejects_wrong_status(client, db_session) -> None:
     response = client.post(f"/api/v1/applications/{app.id}/resume")
     assert response.status_code == 409
 
+
+def test_patch_status_clears_interrupt_when_leaving_needs_manual(client, db_session) -> None:
+    """PATCH away from interrupt states clears interrupt metadata."""
+    _seed_policy(db_session)
+    app = _seed_application(db_session, status=ApplicationStatus.NEEDS_MANUAL, doc_approved=True)
+    app.interrupt_metadata_json = '{"reason": "captcha"}'
+    db_session.commit()
+
+    response = client.patch(
+        f"/api/v1/applications/{app.id}/status",
+        json={"target_status": "failed"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert data["interrupt_metadata_json"] is None
+

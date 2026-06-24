@@ -55,6 +55,7 @@ class Application(Base, TimestampMixin):
     )
     status_message: Mapped[str | None] = mapped_column(Text)
     interrupt_metadata_json: Mapped[str | None] = mapped_column(Text)
+    pipeline_claimed_at: Mapped[str | None] = mapped_column(String(50))
     platform: Mapped[str | None] = mapped_column(String(100))
     submitted_at: Mapped[str | None] = mapped_column(String(50))
 

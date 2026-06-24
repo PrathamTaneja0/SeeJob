@@ -23,8 +23,9 @@ from seejob.schemas.application import (
 from seejob.services.apply import ApplyError, run_application_apply
 from seejob.services.approval import ApprovalGateError, validate_approval_gates
 from seejob.services.documents import DocumentGenerationError, queue_document_generation
-from seejob.services.interrupts import InterruptError, resume_from_interrupt
+from seejob.services.interrupts import InterruptError, clear_interrupt, resume_from_interrupt
 from seejob.services.policy import get_policy_config
+from seejob.services.rate_limit import RateLimitExceeded
 from seejob.services.state_machine import InvalidTransitionError, transition
 
 router = APIRouter()
@@ -109,6 +110,10 @@ def update_application_status(
         raise HTTPException(status_code=404, detail=f"Application {application_id} not found")
 
     policy = get_policy_config(db)
+
+    if app.status in (ApplicationStatus.NEEDS_MANUAL, ApplicationStatus.AUTH_REQUIRED):
+        if data.target_status != app.status:
+            clear_interrupt(app)
 
     try:
         validate_approval_gates(
@@ -254,6 +259,11 @@ async def apply_application(
             dry_run=dry_run,
             submit_approved=submit_approved,
         )
+    except RateLimitExceeded as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(exc),
+        ) from exc
     except ApprovalGateError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ApplyError as exc:

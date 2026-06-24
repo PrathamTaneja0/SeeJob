@@ -154,3 +154,27 @@ def test_apply_without_submit_approval_fills_only(client, db_session, mock_actua
     call_kwargs = mock_actuator.apply.await_args.kwargs
     assert call_kwargs["dry_run"] is False
     assert call_kwargs["submit"] is False
+
+
+def test_apply_endpoint_blocks_when_rate_limited(client, db_session, mock_actuator) -> None:
+    """POST /apply enforces daily apply caps before browser automation."""
+    _seed_policy(db_session, rate_limits_json='{"greenhouse": 1}')
+    from seejob.services.rate_limit import record_apply_run
+
+    record_apply_run(
+        db_session,
+        application_id=999,
+        platform="greenhouse",
+        success=True,
+    )
+    db_session.commit()
+
+    app = _seed_ready_application(db_session, doc_approved=True)
+    app.platform = "greenhouse"
+    db_session.commit()
+
+    with patch("seejob.services.apply.PlaywrightActuator", return_value=mock_actuator):
+        response = client.post(f"/api/v1/applications/{app.id}/apply?dry_run=false")
+
+    assert response.status_code == 429
+    mock_actuator.apply.assert_not_awaited()
