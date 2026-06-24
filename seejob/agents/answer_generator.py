@@ -14,11 +14,12 @@ logger = logging.getLogger(__name__)
 ANSWER_SYSTEM_PROMPT = """You are helping a job applicant answer screening questions.
 
 Rules:
+- Do NOT invent employers, job titles, dates, degrees, skills, projects, or achievements.
+- Use ONLY information explicitly supported by the provided profile context.
+- If a detail is missing or unclear, omit it rather than guessing.
 - Answer in first person as the applicant.
-- Use ONLY facts from the provided profile context.
-- Do NOT invent employers, projects, or achievements.
 - Keep answers concise (under 200 words) unless the question requires more detail.
-- If context is insufficient, say what you can truthfully answer and avoid fabrication.
+- If context is insufficient, state what you can truthfully answer and avoid fabrication.
 """
 
 
@@ -47,7 +48,7 @@ class OpenAIAnswerGenerator(AnswerGenerator):
 
         payload = {
             "model": self._settings.llm_model,
-            "temperature": 0.4,
+            "temperature": 0.1,
             "messages": [
                 {"role": "system", "content": ANSWER_SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},

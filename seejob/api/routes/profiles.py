@@ -1,9 +1,12 @@
 """Profile CRUD and ingestion endpoints."""
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from seejob.core.dependencies import get_session
+from seejob.core.exceptions import LLMUnavailableError, UnsupportedMediaTypeError
 from seejob.schemas.ingestion import (
     IngestionRead,
     LinkImportRead,
@@ -27,6 +30,46 @@ from seejob.services import profile as profile_service
 from seejob.services import qa as qa_service
 
 router = APIRouter()
+
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".docx", ".txt"}
+ALLOWED_CONTENT_TYPES: dict[str, set[str]] = {
+    ".pdf": {"application/pdf", "application/octet-stream"},
+    ".docx": {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/octet-stream",
+    },
+    ".txt": {"text/plain", "application/octet-stream"},
+}
+
+
+def _validate_upload_file(file: UploadFile, content: bytes) -> None:
+    filename = file.filename or ""
+    suffix = Path(filename).suffix.lower()
+    if suffix == ".doc":
+        raise UnsupportedMediaTypeError(
+            "Legacy .doc files are not supported. Please upload .docx instead."
+        )
+    if suffix not in ALLOWED_UPLOAD_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=f"Unsupported file type: {suffix or 'unknown'}. Use PDF, DOCX, or TXT.",
+        )
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail="File exceeds 10MB upload limit.",
+        )
+    if file.content_type:
+        allowed_types = ALLOWED_CONTENT_TYPES.get(suffix, set())
+        if allowed_types and file.content_type not in allowed_types:
+            raise HTTPException(
+                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail=(
+                    f"Content-Type {file.content_type!r} does not match "
+                    f"file extension {suffix}."
+                ),
+            )
 
 
 @router.get("", response_model=list[PersonRead])
@@ -140,7 +183,8 @@ async def ingest_profile_cv(
 ) -> IngestionRead:
     """Upload and ingest a master CV (PDF, DOCX, or TXT)."""
     try:
-        content = await file.read()
+        content = await file.read(MAX_UPLOAD_BYTES + 1)
+        _validate_upload_file(file, content)
         result = await ingestion_service.ingest_cv(
             db,
             person_id,
@@ -150,6 +194,16 @@ async def ingest_profile_cv(
         return IngestionRead.model_validate(result, from_attributes=True)
     except profile_service.ProfileNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except UnsupportedMediaTypeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=str(exc),
+        ) from exc
+    except LLMUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -179,6 +233,11 @@ async def import_profile_text(
         return IngestionRead.model_validate(result, from_attributes=True)
     except profile_service.ProfileNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except LLMUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -195,3 +254,8 @@ async def answer_screening_question(
         return ScreeningAnswerRead.model_validate(result, from_attributes=True)
     except profile_service.ProfileNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except LLMUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc

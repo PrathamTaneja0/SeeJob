@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from seejob.agents.answer_generator import AnswerGenerator, OpenAIAnswerGenerator
+from seejob.agents.answer_generator import AnswerGenerator
+from seejob.core.llm import resolve_answer_generator
 from seejob.models.screening import ScreeningAnswer
 from seejob.services.memory import VectorMemoryStore
 from seejob.services.profile import get_person
@@ -133,15 +134,9 @@ async def get_or_generate_answer(
             context_parts.append(f"{exp.title} at {exp.company}: {exp.description or ''}")
         context = "\n".join(p for p in context_parts if p)
 
-    generator = answer_generator or OpenAIAnswerGenerator()
-    try:
-        answer = await generator.generate(question, context)
-        source = "rag+llm"
-    except ValueError:
-        from seejob.agents.answer_generator import MockAnswerGenerator
-
-        answer = await MockAnswerGenerator().generate(question, context)
-        source = "rag+mock"
+    generator = resolve_answer_generator(answer_generator)
+    answer = await generator.generate(question, context)
+    source = "rag+llm"
 
     q_hash = hash_question(question)
     if cached:

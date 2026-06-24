@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     vector_enabled: bool = False
 
     openai_api_key: str = ""
+    allow_mock_llm: bool = False
     openai_base_url: str = "https://api.openai.com/v1"
     llm_model: str = "gpt-4o-mini"
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"

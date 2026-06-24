@@ -48,7 +48,7 @@ async def test_qa_cache_miss_then_hit(db_session, person, memory_store) -> None:
         answer_generator=generator,
     )
     assert first.from_cache is False
-    assert first.source in {"rag+llm", "rag+mock"}
+    assert first.source == "rag+llm"
     assert "FastAPI" in first.answer or "experience" in first.answer.lower()
 
     second = await get_or_generate_answer(
