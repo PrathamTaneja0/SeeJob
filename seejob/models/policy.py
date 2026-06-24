@@ -20,6 +20,7 @@ class PolicyConfig(Base, TimestampMixin):
     require_doc_approval: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     require_submit_approval: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     min_fit_score: Mapped[float] = mapped_column(default=0.6, nullable=False)
+    ats_min_score: Mapped[float] = mapped_column(default=0.7, nullable=False)
     daily_apply_limit: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
     rate_limits_json: Mapped[str] = mapped_column(
         Text,

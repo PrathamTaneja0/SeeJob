@@ -54,3 +54,26 @@ class ApplicationStatusUpdate(BaseModel):
     target_status: ApplicationStatus
     message: str | None = None
     submit_approved: bool = False
+
+
+class ApplicationDocumentsView(BaseModel):
+    """Preview of generated documents with ATS reports."""
+
+    application_id: int
+    status: ApplicationStatus
+    documents: list[GeneratedDocumentRead]
+
+
+class DocumentApproveUpdate(BaseModel):
+    """Approve a generated document for form filling."""
+
+    approved: bool = True
+
+
+class DocumentGenerationResponse(BaseModel):
+    """Response after triggering document generation."""
+
+    application_id: int
+    status: ApplicationStatus
+    documents: list[GeneratedDocumentRead]
+    message: str | None = None

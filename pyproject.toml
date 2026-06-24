@@ -27,6 +27,7 @@ authors = [{ name = "SeeJob" }]
     "beautifulsoup4>=4.12.0",
     "readability-lxml>=0.8.1",
     "lxml>=5.0.0",
+    "reportlab>=4.2.0",
 ]
 
 [project.optional-dependencies]

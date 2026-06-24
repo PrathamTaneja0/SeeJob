@@ -17,6 +17,7 @@ def test_ensure_policy_row_retries_on_integrity_error(db_session) -> None:
         require_doc_approval=True,
         require_submit_approval=True,
         min_fit_score=0.6,
+        ats_min_score=0.7,
         daily_apply_limit=10,
         rate_limits_json='{"default": 10}',
         blocked_companies_json="[]",

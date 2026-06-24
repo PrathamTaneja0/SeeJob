@@ -46,6 +46,7 @@ class PolicyConfigRead(BaseModel):
     require_doc_approval: bool
     require_submit_approval: bool
     min_fit_score: float
+    ats_min_score: float = 0.7
     daily_apply_limit: int
     rate_limits: RateLimits
     job_filters: JobFilters | None
@@ -65,6 +66,7 @@ class PolicyConfigUpdate(BaseModel):
     require_doc_approval: bool | None = None
     require_submit_approval: bool | None = None
     min_fit_score: float | None = Field(default=None, ge=0, le=1)
+    ats_min_score: float | None = Field(default=None, ge=0, le=1)
     daily_apply_limit: int | None = Field(default=None, ge=0)
     rate_limits: RateLimits | None = None
     job_filters: JobFilters | None = None

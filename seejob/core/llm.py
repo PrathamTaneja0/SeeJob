@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from seejob.agents.answer_generator import AnswerGenerator, OpenAIAnswerGenerator
+from seejob.agents.document_generator import DocumentGenerator, OpenAIDocumentGenerator
 from seejob.agents.profile_extractor import OpenAIProfileExtractor, ProfileExtractor
 from seejob.core.config import Settings, get_settings
 from seejob.core.exceptions import LLMUnavailableError
@@ -57,5 +58,27 @@ def resolve_answer_generator(
 
         logger.warning("Using MockAnswerGenerator (SEEJOB_ALLOW_MOCK_LLM=true)")
         return MockAnswerGenerator()
+
+    raise LLMUnavailableError(_MISSING_KEY_MESSAGE)
+
+
+def resolve_document_generator(
+    generator: DocumentGenerator | None = None,
+    *,
+    settings: Settings | None = None,
+) -> DocumentGenerator:
+    """Return injected generator, OpenAI generator, or dev-only mock."""
+    if generator is not None:
+        return generator
+
+    cfg = settings or get_settings()
+    if cfg.openai_api_key:
+        return OpenAIDocumentGenerator(cfg)
+
+    if cfg.allow_mock_llm:
+        from seejob.agents.document_generator import MockDocumentGenerator
+
+        logger.warning("Using MockDocumentGenerator (SEEJOB_ALLOW_MOCK_LLM=true)")
+        return MockDocumentGenerator()
 
     raise LLMUnavailableError(_MISSING_KEY_MESSAGE)

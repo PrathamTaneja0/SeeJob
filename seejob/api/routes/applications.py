@@ -7,12 +7,17 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from seejob.core.dependencies import get_session
-from seejob.models.application import Application, ApplicationStatus
+from seejob.models.application import Application, ApplicationStatus, GeneratedDocument
 from seejob.schemas.application import (
+    ApplicationDocumentsView,
     ApplicationPipelineView,
     ApplicationRead,
     ApplicationStatusUpdate,
+    DocumentApproveUpdate,
+    DocumentGenerationResponse,
+    GeneratedDocumentRead,
 )
+from seejob.services.documents import DocumentGenerationError, queue_document_generation
 from seejob.services.approval import ApprovalGateError, validate_approval_gates
 from seejob.services.policy import get_policy_config
 from seejob.services.state_machine import InvalidTransitionError, transition
@@ -123,3 +128,85 @@ def update_application_status(
     db.commit()
     db.refresh(app)
     return app
+
+
+@router.post("/{application_id}/generate", response_model=DocumentGenerationResponse)
+def generate_documents(application_id: int, db: Session = Depends(get_session)) -> DocumentGenerationResponse:
+    """Trigger tailored document generation and transition to docs_ready."""
+    app = db.scalar(
+        select(Application)
+        .where(Application.id == application_id)
+        .options(selectinload(Application.documents))
+    )
+    if app is None:
+        raise HTTPException(status_code=404, detail=f"Application {application_id} not found")
+
+    try:
+        result = queue_document_generation(db, application_id)
+    except DocumentGenerationError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    db.refresh(app)
+    return DocumentGenerationResponse(
+        application_id=application_id,
+        status=app.status,
+        documents=result.documents,
+        message=app.status_message,
+    )
+
+
+@router.get("/{application_id}/documents", response_model=ApplicationDocumentsView)
+def get_application_documents(
+    application_id: int, db: Session = Depends(get_session)
+) -> ApplicationDocumentsView:
+    """Preview generated markdown and ATS critic reports."""
+    app = db.scalar(
+        select(Application)
+        .where(Application.id == application_id)
+        .options(selectinload(Application.documents))
+    )
+    if app is None:
+        raise HTTPException(status_code=404, detail=f"Application {application_id} not found")
+
+    return ApplicationDocumentsView(
+        application_id=app.id,
+        status=app.status,
+        documents=app.documents,
+    )
+
+
+@router.patch(
+    "/{application_id}/documents/{doc_id}/approve",
+    response_model=GeneratedDocumentRead,
+)
+def approve_document(
+    application_id: int,
+    doc_id: int,
+    data: DocumentApproveUpdate,
+    db: Session = Depends(get_session),
+) -> GeneratedDocument:
+    """Approve or reject a generated document before form filling."""
+    app = db.scalar(
+        select(Application)
+        .where(Application.id == application_id)
+        .options(selectinload(Application.documents))
+    )
+    if app is None:
+        raise HTTPException(status_code=404, detail=f"Application {application_id} not found")
+
+    policy = get_policy_config(db)
+    doc = next((d for d in app.documents if d.id == doc_id), None)
+    if doc is None:
+        raise HTTPException(status_code=404, detail=f"Document {doc_id} not found")
+
+    if data.approved and policy.require_doc_approval:
+        if doc.ats_score is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Document has not passed ATS critique yet",
+            )
+
+    doc.approved = data.approved
+    db.commit()
+    db.refresh(doc)
+    return doc
