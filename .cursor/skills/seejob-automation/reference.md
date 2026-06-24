@@ -44,31 +44,61 @@ Standalone tables: `ATSLearning`, `AgentRun`, `PolicyConfig`, `Job`
 
 ## Environment variables
 
-All prefixed with `SEEJOB_`. See `.env.example` for full list.
+All prefixed with `SEEJOB_` unless noted. See `.env.example` for full list.
 
 Critical:
 - `SEEJOB_FERNET_KEY` — required for `SiteAccount` encryption
 - `SEEJOB_DATABASE_URL` — `sqlite:///./seejob.db` (dev) or PostgreSQL URL (prod)
 - `SEEJOB_SECRET_KEY` — API signing (future auth)
 
-## BrowserActuator interface
+Integrations (optional):
+- `GMAIL_USER`, `GMAIL_APP_PASSWORD` — IMAP OTP fetch
+- `SEEJOB_CAPSOLVER_API_KEY` — captcha auto-solve
+- `SEEJOB_OPENAI_API_KEY` — LLM document generation
+- `SEEJOB_ALLOW_MOCK_LLM` — dev/test only; blocked in production
 
-Located in `seejob/browser/interfaces.py`. Phase 2 Playwright implementation must:
+## BrowserActuator (implemented)
 
-1. Load `BrowserSession.profile_dir` for cookie persistence
-2. Return `BrowserActionResult.CAPTCHA` → orchestrator sets `needs_manual`
-3. Return `BrowserActionResult.AUTH_REQUIRED` → orchestrator sets `auth_required`
-4. Never call `submit_form()` without submit approval gate
-5. Call `save_session()` after successful auth
+`PlaywrightActuator` in `seejob/browser/actuator.py` implements `seejob/browser/interfaces.py`:
 
-## Agent interfaces
+1. Loads `BrowserSession.profile_dir` for cookie persistence
+2. Returns `BrowserActionResult.CAPTCHA` → orchestrator sets `needs_manual`
+3. Returns `BrowserActionResult.AUTH_REQUIRED` → orchestrator sets `auth_required`
+4. Never calls `submit_form()` without submit approval gate
+5. Calls `save_session()` after successful auth
+6. Uses `field_mapper.py`, `form_filler.py`, `dom_extractor.py` for ATS forms
+7. Writes `ATSLearning` records on successful field mappings
 
-Located in `seejob/agents/interfaces.py`:
+## Agent implementations
 
-- `DocumentGenerator` — CV and cover letter with `TruthfulnessConstraint`
-- `ScreeningAnswerer` — Q&A with cache-first lookup
-- `JobScorer` — fit score 0.0–1.0
-- `Orchestrator` — pipeline step advancement and approval requests
+| Interface | Implementation | Location |
+|-----------|----------------|----------|
+| `DocumentGenerator` | LLM + truthfulness critic | `seejob/agents/document_generator.py` |
+| `ScreeningAnswerer` | Cache-first Q&A | `seejob/agents/answer_generator.py` |
+| `JobScorer` | Fit scoring | `seejob/services/scoring.py` |
+| Pipeline | Doc gen + apply orchestration | `seejob/services/pipeline.py` |
+
+## Workers
+
+| CLI | Module | Purpose |
+|-----|--------|---------|
+| `seejob` | `seejob/api/app.py` | FastAPI server |
+| `seejob-sourcing` | `seejob/workers/sourcing.py` | One sourcing pass |
+| `seejob-tick` | `seejob/workers/scheduler.py` | Sourcing + pipeline queue |
+
+Sourcing sources: RSS (`seejob/services/sourcing/sources/rss.py`), manual ingest, board API stub.
+
+## API routes
+
+| Prefix | Module |
+|--------|--------|
+| `/api/v1/profiles` | Profile CRUD, resume upload |
+| `/api/v1/jobs` | Job queue, ingest |
+| `/api/v1/applications` | Pipeline, approvals, resume, OTP |
+| `/api/v1/events` | Poll + SSE stream |
+| `/api/v1/policy` | PolicyConfig |
+| `/api/v1/site-accounts` | Encrypted ATS credentials |
+| `/health` | Health check |
 
 ## Screening question hashing
 
@@ -80,6 +110,14 @@ h = hash_question("Why do you want to work here?")
 ```
 
 Normalization: lowercase, collapse whitespace, strip punctuation.
+
+## Interrupts and resume
+
+Interrupt metadata stored as JSON on `Application`. States: `needs_manual`, `auth_required`.
+
+- Resume: `POST /api/v1/applications/{id}/resume`
+- OTP injection: `POST /api/v1/applications/{id}/provide-otp`
+- Auth service: `seejob/services/auth.py`
 
 ## API error codes
 
@@ -97,11 +135,23 @@ alembic downgrade -1          # rollback one
 alembic revision --autogenerate -m "msg"  # new migration
 ```
 
+## Dashboard
+
+React app in `dashboard/` — pages: PipelineKanban, JobQueue, ApplicationDetail, ProfileEditor, Settings, AgentConsole.
+
+- Dev: `npm run dev` on :5173 (proxies `/api` to :8000)
+- Prod: `npm run build` → served by FastAPI at `/`
+
 ## Testing focus areas
 
-1. State machine — every new transition must have tests in `tests/test_state_machine.py`
-2. Schemas — validation rules in `tests/test_profile_schemas.py`
+1. State machine — `tests/test_state_machine.py`
+2. Schemas — `tests/test_profile_schemas.py`
 3. API smoke — `tests/test_api.py` with in-memory SQLite
+4. Pipeline — `tests/test_pipeline.py`, `tests/test_scheduler.py`
+5. Browser apply — `tests/test_browser_apply.py` (mocked Playwright)
+6. Auth/integrations — `tests/test_auth.py`, `tests/test_gmail_otp.py`, `tests/test_capsolver.py`
+
+CI: `.github/workflows/ci.yml` runs `pytest` and `dashboard npm run build` on push/PR to `main`.
 
 ## Git rules for agents
 
