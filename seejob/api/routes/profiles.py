@@ -1,9 +1,16 @@
-"""Profile CRUD endpoints."""
+"""Profile CRUD and ingestion endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from seejob.core.dependencies import get_session
+from seejob.schemas.ingestion import (
+    IngestionRead,
+    LinkImportRead,
+    ManualTextImport,
+    ScreeningAnswerRead,
+    ScreeningQuestionRequest,
+)
 from seejob.schemas.profile import (
     EducationCreate,
     EducationRead,
@@ -15,7 +22,9 @@ from seejob.schemas.profile import (
     SkillCreate,
     SkillRead,
 )
+from seejob.services import ingestion as ingestion_service
 from seejob.services import profile as profile_service
+from seejob.services import qa as qa_service
 
 router = APIRouter()
 
@@ -33,7 +42,10 @@ def list_profiles(
 @router.post("", response_model=PersonRead, status_code=status.HTTP_201_CREATED)
 def create_profile(data: PersonCreate, db: Session = Depends(get_session)) -> PersonRead:
     """Create a new person profile."""
-    return profile_service.create_person(db, data)
+    try:
+        return profile_service.create_person(db, data)
+    except profile_service.DuplicateEmailError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 @router.get("/{person_id}", response_model=PersonRead)
@@ -56,6 +68,8 @@ def update_profile(
         return profile_service.update_person(db, person_id, data)
     except profile_service.ProfileNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except profile_service.DuplicateEmailError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 @router.delete("/{person_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -114,5 +128,70 @@ def add_skill(
     """Add a skill to a profile."""
     try:
         return profile_service.add_skill(db, person_id, data)
+    except profile_service.ProfileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.post("/{person_id}/ingest", response_model=IngestionRead)
+async def ingest_profile_cv(
+    person_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_session),
+) -> IngestionRead:
+    """Upload and ingest a master CV (PDF, DOCX, or TXT)."""
+    try:
+        content = await file.read()
+        result = await ingestion_service.ingest_cv(
+            db,
+            person_id,
+            content,
+            file.filename or "upload.pdf",
+        )
+        return IngestionRead.model_validate(result, from_attributes=True)
+    except profile_service.ProfileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/{person_id}/import-links", response_model=LinkImportRead)
+async def import_profile_links(
+    person_id: int,
+    db: Session = Depends(get_session),
+) -> LinkImportRead:
+    """Fetch public LinkedIn/GitHub profile text into vector memory."""
+    try:
+        result = await ingestion_service.import_profile_links(db, person_id)
+        return LinkImportRead.model_validate(result, from_attributes=True)
+    except profile_service.ProfileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.post("/{person_id}/import-text", response_model=IngestionRead)
+async def import_profile_text(
+    person_id: int,
+    data: ManualTextImport,
+    db: Session = Depends(get_session),
+) -> IngestionRead:
+    """Manually paste profile text when URL scraping is unavailable."""
+    try:
+        result = await ingestion_service.ingest_text(db, person_id, data.text)
+        return IngestionRead.model_validate(result, from_attributes=True)
+    except profile_service.ProfileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/{person_id}/screening/answer", response_model=ScreeningAnswerRead)
+async def answer_screening_question(
+    person_id: int,
+    data: ScreeningQuestionRequest,
+    db: Session = Depends(get_session),
+) -> ScreeningAnswerRead:
+    """Get cached or RAG-generated answer for a screening question."""
+    try:
+        result = await qa_service.get_or_generate_answer(db, data.question, person_id)
+        return ScreeningAnswerRead.model_validate(result, from_attributes=True)
     except profile_service.ProfileNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

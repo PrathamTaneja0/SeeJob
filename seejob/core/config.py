@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     chroma_persist_dir: Path = Path("./chroma_data")
     vector_enabled: bool = False
 
+    openai_api_key: str = ""
+    openai_base_url: str = "https://api.openai.com/v1"
+    llm_model: str = "gpt-4o-mini"
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    embedding_provider: Literal["sentence_transformers", "openai", "hash"] = "hash"
+
     sourcing_cron: str = "0 8 * * *"
 
     @field_validator("cors_origins", mode="before")

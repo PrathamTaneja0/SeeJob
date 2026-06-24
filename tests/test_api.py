@@ -35,3 +35,18 @@ def test_policy_defaults(client) -> None:
     assert data["require_doc_approval"] is True
     assert data["require_submit_approval"] is True
     assert data["auto_apply"] is False
+
+
+def test_duplicate_email_returns_409(client) -> None:
+    """Creating a profile with a duplicate email returns 409 Conflict."""
+    payload = {
+        "full_name": "Test User",
+        "email": "dup@example.com",
+        "work_authorization": "citizen",
+    }
+    first = client.post("/api/v1/profiles", json=payload)
+    assert first.status_code == 201
+
+    second = client.post("/api/v1/profiles", json=payload)
+    assert second.status_code == 409
+    assert "already registered" in second.json()["detail"]

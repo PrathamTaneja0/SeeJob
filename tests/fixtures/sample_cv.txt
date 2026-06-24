@@ -1,0 +1,23 @@
+Jane Doe
+Software Engineer
+jane.doe@example.com | San Francisco, CA
+
+SUMMARY
+Backend engineer with 5 years building Python services and APIs.
+
+EXPERIENCE
+Acme Corp — Software Engineer (Jan 2020 – Present)
+- Built REST APIs with FastAPI serving 1M requests/day
+- Led migration from monolith to microservices
+
+EDUCATION
+State University — B.S. Computer Science (2016 – 2020)
+
+SKILLS
+Python, FastAPI, PostgreSQL, Docker, AWS
+
+PROJECTS
+Job Tracker: Personal project using SQLite and React for application tracking.
+
+BEHAVIORAL
+Led a cross-team incident response that reduced downtime by 40% through better monitoring.

@@ -17,7 +17,10 @@ def _get_fernet() -> Fernet:
             "SEEJOB_FERNET_KEY is not set. Generate one with: "
             'python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
         )
-    return Fernet(key.encode() if isinstance(key, str) else key)
+    try:
+        return Fernet(key.encode() if isinstance(key, str) else key)
+    except ValueError as exc:
+        raise EncryptionError("Invalid SEEJOB_FERNET_KEY format") from exc
 
 
 def encrypt_value(plaintext: str) -> str:

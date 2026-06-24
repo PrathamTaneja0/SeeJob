@@ -3,7 +3,7 @@
 import enum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum, Float, ForeignKey, String, Text
+from sqlalchemy import Enum, Float, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from seejob.models.base import Base, TimestampMixin
@@ -40,6 +40,9 @@ class Application(Base, TimestampMixin):
     """Job application with state-machine-driven lifecycle."""
 
     __tablename__ = "applications"
+    __table_args__ = (
+        UniqueConstraint("person_id", "job_id", name="uq_application_person_job"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     person_id: Mapped[int] = mapped_column(ForeignKey("persons.id", ondelete="CASCADE"), index=True)

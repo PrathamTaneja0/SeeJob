@@ -2,6 +2,7 @@
 
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from seejob.models.policy import PolicyConfig
@@ -52,15 +53,34 @@ def _to_read(policy: PolicyConfig) -> PolicyConfigRead:
     )
 
 
-def get_or_create_policy(db: Session) -> PolicyConfigRead:
-    """Return the singleton policy config, creating defaults if missing."""
+def _ensure_policy_row(db: Session) -> PolicyConfig:
+    """Return the singleton policy row, creating defaults if missing."""
     policy = db.scalar(select(PolicyConfig).where(PolicyConfig.id == 1))
-    if policy is None:
-        policy = _default_policy()
-        db.add(policy)
+    if policy is not None:
+        return policy
+
+    policy = _default_policy()
+    db.add(policy)
+    try:
         db.commit()
         db.refresh(policy)
-    return _to_read(policy)
+        return policy
+    except IntegrityError:
+        db.rollback()
+        policy = db.scalar(select(PolicyConfig).where(PolicyConfig.id == 1))
+        if policy is None:
+            raise
+        return policy
+
+
+def get_policy_config(db: Session) -> PolicyConfig:
+    """Return the singleton policy ORM row."""
+    return _ensure_policy_row(db)
+
+
+def get_or_create_policy(db: Session) -> PolicyConfigRead:
+    """Return the singleton policy config, creating defaults if missing."""
+    return _to_read(_ensure_policy_row(db))
 
 
 def update_policy(db: Session, data: PolicyConfigUpdate) -> PolicyConfigRead:
@@ -69,7 +89,13 @@ def update_policy(db: Session, data: PolicyConfigUpdate) -> PolicyConfigRead:
     if policy is None:
         policy = _default_policy()
         db.add(policy)
-        db.flush()
+        try:
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            policy = db.scalar(select(PolicyConfig).where(PolicyConfig.id == 1))
+            if policy is None:
+                raise
 
     payload = data.model_dump(exclude_unset=True)
     if "rate_limits" in payload and payload["rate_limits"] is not None:

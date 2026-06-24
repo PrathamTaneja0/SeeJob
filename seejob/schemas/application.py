@@ -53,3 +53,4 @@ class ApplicationStatusUpdate(BaseModel):
 
     target_status: ApplicationStatus
     message: str | None = None
+    submit_approved: bool = False

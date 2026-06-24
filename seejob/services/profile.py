@@ -1,6 +1,7 @@
 """Profile CRUD service."""
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from seejob.models.person import Education, Experience, Person, Skill
@@ -15,6 +16,10 @@ from seejob.schemas.profile import (
 
 class ProfileNotFoundError(LookupError):
     """Raised when a person profile does not exist."""
+
+
+class DuplicateEmailError(ValueError):
+    """Raised when a profile email is already registered."""
 
 
 def list_persons(db: Session, *, skip: int = 0, limit: int = 50) -> list[Person]:
@@ -53,7 +58,11 @@ def create_person(db: Session, data: PersonCreate) -> Person:
     """Create a new person profile."""
     person = Person(**data.model_dump())
     db.add(person)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise DuplicateEmailError(f"Email {data.email} is already registered") from exc
     db.refresh(person)
     return get_person(db, person.id)
 
@@ -63,7 +72,12 @@ def update_person(db: Session, person_id: int, data: PersonUpdate) -> Person:
     person = get_person(db, person_id)
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(person, field, value)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        email = data.email or person.email
+        raise DuplicateEmailError(f"Email {email} is already registered") from exc
     return get_person(db, person_id)
 
 

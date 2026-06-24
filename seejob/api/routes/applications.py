@@ -1,5 +1,7 @@
 """Application pipeline endpoints."""
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
@@ -11,6 +13,8 @@ from seejob.schemas.application import (
     ApplicationRead,
     ApplicationStatusUpdate,
 )
+from seejob.services.approval import ApprovalGateError, validate_approval_gates
+from seejob.services.policy import get_policy_config
 from seejob.services.state_machine import InvalidTransitionError, transition
 
 router = APIRouter()
@@ -86,14 +90,33 @@ def update_application_status(
     db: Session = Depends(get_session),
 ) -> Application:
     """Transition application to a new status via the state machine."""
-    app = db.get(Application, application_id)
+    app = db.scalar(
+        select(Application)
+        .where(Application.id == application_id)
+        .options(selectinload(Application.documents))
+    )
     if app is None:
         raise HTTPException(status_code=404, detail=f"Application {application_id} not found")
+
+    policy = get_policy_config(db)
+
+    try:
+        validate_approval_gates(
+            app,
+            policy,
+            data.target_status,
+            submit_approved=data.submit_approved,
+        )
+    except ApprovalGateError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
     try:
         app.status = transition(app.status, data.target_status)
     except InvalidTransitionError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    if data.target_status == ApplicationStatus.SUBMITTED:
+        app.submitted_at = datetime.now(UTC).isoformat()
 
     if data.message:
         app.status_message = data.message
