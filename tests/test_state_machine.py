@@ -4,8 +4,8 @@ import pytest
 
 from seejob.models.application import ApplicationStatus
 from seejob.services.state_machine import (
-    InvalidTransitionError,
     TERMINAL_STATUSES,
+    InvalidTransitionError,
     can_transition,
     get_valid_transitions,
     transition,

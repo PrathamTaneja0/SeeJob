@@ -1,9 +1,9 @@
 """Business logic services."""
 
 from seejob.services.state_machine import (
-    InvalidTransitionError,
     TERMINAL_STATUSES,
     VALID_TRANSITIONS,
+    InvalidTransitionError,
     can_transition,
     get_valid_transitions,
     transition,

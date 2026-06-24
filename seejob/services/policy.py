@@ -1,6 +1,5 @@
 """Policy configuration service."""
 
-import json
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
