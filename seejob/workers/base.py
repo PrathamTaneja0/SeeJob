@@ -44,13 +44,10 @@ class SourcingWorker(BaseWorker):
     name = "sourcing_worker"
 
     async def run(self) -> WorkerResult:
-        """Placeholder: discover jobs from configured sources on schedule."""
-        return WorkerResult(
-            worker_name=self.name,
-            status=WorkerStatus.COMPLETED,
-            items_processed=0,
-            message="Sourcing worker not yet implemented (Phase 1)",
-        )
+        """Discover jobs from configured sources on schedule."""
+        from seejob.workers.sourcing import run_sourcing_worker
+
+        return await run_sourcing_worker()
 
 
 class ScoringWorker(BaseWorker):

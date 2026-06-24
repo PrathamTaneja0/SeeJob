@@ -30,6 +30,10 @@ class JobFilters(BaseModel):
     locations: list[str] = Field(default_factory=list)
     titles_include: list[str] = Field(default_factory=list)
     titles_exclude: list[str] = Field(default_factory=list)
+    must_have_skills: list[str] = Field(default_factory=list)
+    seniority_exclude: list[str] = Field(
+        default_factory=lambda: ["senior", "staff", "principal", "director", "vp", "head of"]
+    )
 
 
 class PolicyConfigRead(BaseModel):
@@ -49,6 +53,7 @@ class PolicyConfigRead(BaseModel):
     blocked_keywords: list[str]
     sourcing_enabled: bool
     sourcing_schedule: str
+    rss_feeds: list[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
@@ -67,6 +72,7 @@ class PolicyConfigUpdate(BaseModel):
     blocked_keywords: list[str] | None = None
     sourcing_enabled: bool | None = None
     sourcing_schedule: str | None = None
+    rss_feeds: list[str] | None = None
 
 
 class PolicyConfigDBFields(BaseModel):
@@ -121,3 +127,11 @@ class PolicyConfigDBFields(BaseModel):
         import json
 
         return json.loads(raw)
+
+    @staticmethod
+    def dumps_rss_feeds(feeds: list[str] | None) -> str | None:
+        if feeds is None:
+            return None
+        import json
+
+        return json.dumps(feeds)

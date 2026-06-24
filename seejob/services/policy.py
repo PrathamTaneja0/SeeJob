@@ -48,6 +48,7 @@ def _to_read(policy: PolicyConfig) -> PolicyConfigRead:
         blocked_keywords=PolicyConfigDBFields.loads_list(policy.blocked_keywords_json),
         sourcing_enabled=policy.sourcing_enabled,
         sourcing_schedule=policy.sourcing_schedule,
+        rss_feeds=PolicyConfigDBFields.loads_list(policy.rss_feeds_json),
         created_at=policy.created_at,
         updated_at=policy.updated_at,
     )
@@ -117,6 +118,8 @@ def update_policy(db: Session, data: PolicyConfigUpdate) -> PolicyConfigRead:
         policy.blocked_keywords_json = PolicyConfigDBFields.dumps_list(
             payload.pop("blocked_keywords")
         )
+    if "rss_feeds" in payload:
+        policy.rss_feeds_json = PolicyConfigDBFields.dumps_list(payload.pop("rss_feeds"))
 
     for field, value in payload.items():
         setattr(policy, field, value)

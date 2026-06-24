@@ -4,7 +4,7 @@ from seejob.models.agent import AgentRun, AgentRunStatus
 from seejob.models.application import Application, ApplicationStatus, GeneratedDocument
 from seejob.models.ats import ATSLearning
 from seejob.models.base import Base, TimestampMixin
-from seejob.models.job import Job, JobStatus
+from seejob.models.job import Job, JobStatus, hash_job_url, normalize_job_url
 from seejob.models.person import Education, Experience, Person, Skill
 from seejob.models.policy import PolicyConfig
 from seejob.models.screening import ScreeningAnswer
