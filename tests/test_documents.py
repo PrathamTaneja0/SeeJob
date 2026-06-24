@@ -12,7 +12,10 @@ from seejob.models.application import Application, ApplicationStatus, DocumentTy
 from seejob.models.job import Job, JobStatus
 from seejob.models.person import Experience, Person, Skill, WorkAuthorization
 from seejob.models.policy import PolicyConfig
-from seejob.services.ats_critic import critique_document
+from seejob.core.config import get_settings
+from seejob.core.exceptions import LLMUnavailableError
+from seejob.core.llm import resolve_document_generator
+from seejob.services.ats_critic import critique_document, extract_jd_keywords
 from seejob.services.documents import (
     DocumentGenerationError,
     build_profile_context,
@@ -60,6 +63,7 @@ class FailingThenPassGenerator(DocumentGenerator):
                 "## Skills\n\n- Python\n- FastAPI\n- software\n- engineering\n- APIs\n"
             )
         return (
+            "## Cover Letter\n\n"
             "Dear Hiring Manager,\n\n"
             "I bring Python, FastAPI, and software engineering experience from Acme Corp "
             "building scalable backend APIs.\n\n"
@@ -418,5 +422,123 @@ async def test_generation_fails_when_critic_never_passes(db_session, tmp_path, m
             person.id,
             job.id,
             generator=AlwaysFailGenerator(),
+            settings=get_settings(),
+        )
+
+
+def test_keyword_match_uses_word_boundaries_not_substrings() -> None:
+    """Java in JD must not match JavaScript in document via substring."""
+    jd = "Senior Java developer for backend systems and APIs."
+    keywords = extract_jd_keywords(jd)
+    assert "java" in keywords
+
+    result = critique_document(
+        (
+            "# Jane Applicant\n\n## Skills\n\n"
+            "- JavaScript and TypeScript for frontend development\n"
+            "- Node.js APIs\n"
+        ),
+        jd_text=jd,
+        doc_type="cv",
+        min_score=0.3,
+    )
+    assert "java" not in result.matched_keywords
+    assert "java" in result.missing_keywords
+
+
+def test_cover_letter_passed_not_overridden_when_errors_exist() -> None:
+    """Cover letter relaxation must not pass documents with error-severity issues."""
+    letter = (
+        "Dear Hiring Manager,\n\n"
+        "I bring Python, FastAPI, software engineering, backend development, "
+        "and API experience from Acme Corp building scalable services.\n\n"
+        "Sincerely,\nJane"
+    )
+    result = critique_document(
+        letter,
+        jd_text=SAMPLE_JD,
+        doc_type="cover_letter",
+        min_score=0.4,
+    )
+    assert any(issue.severity == "error" for issue in result.issues)
+    assert result.score >= 0.4 * 0.9
+    assert not result.passed
+
+
+def test_resolve_document_generator_blocks_mock_in_production(monkeypatch) -> None:
+    """Production must fail closed even when SEEJOB_ALLOW_MOCK_LLM is set."""
+    monkeypatch.delenv("SEEJOB_OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("SEEJOB_ALLOW_MOCK_LLM", "true")
+    monkeypatch.setenv("SEEJOB_ENV", "production")
+    get_settings.cache_clear()
+
+    with pytest.raises(LLMUnavailableError, match="SEEJOB_OPENAI_API_KEY"):
+        resolve_document_generator()
+
+    get_settings.cache_clear()
+
+
+def test_resolve_document_generator_allows_mock_in_development(monkeypatch) -> None:
+    """Development may use mock generator when explicitly enabled."""
+    monkeypatch.delenv("SEEJOB_OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("SEEJOB_ALLOW_MOCK_LLM", "true")
+    monkeypatch.setenv("SEEJOB_ENV", "development")
+    get_settings.cache_clear()
+
+    generator = resolve_document_generator()
+    assert generator.__class__.__name__ == "MockDocumentGenerator"
+
+    get_settings.cache_clear()
+
+
+class _FabricatingReviser(DocumentGenerator):
+    """Passes initial truthfulness, then revises in a fabricated employer."""
+
+    async def generate_cv(self, *, profile_context: str, job_context: str) -> str:
+        return (
+            "Python and FastAPI software engineer at Acme Corp "
+            "with backend development and API experience."
+        )
+
+    async def generate_cover_letter(self, *, profile_context: str, job_context: str) -> str:
+        return (
+            "Dear Hiring Manager,\n\n"
+            "I bring Python, FastAPI, and software engineering experience from Acme Corp "
+            "building scalable backend APIs.\n\n"
+            "Sincerely,\nJane"
+        )
+
+    async def revise_document(
+        self,
+        *,
+        doc_type: str,
+        current_markdown: str,
+        profile_context: str,
+        job_context: str,
+        revision_notes: str,
+    ) -> str:
+        if doc_type == "cv":
+            return current_markdown + "\n\nWorked at FakeCorp Industries as CTO."
+        return current_markdown
+
+
+@pytest.mark.asyncio
+async def test_truthfulness_revalidated_after_ats_revision(
+    db_session, tmp_path, monkeypatch
+) -> None:
+    """Each ATS revision is re-checked for truthfulness before persisting."""
+    monkeypatch.setenv("SEEJOB_DOCUMENTS_DIR", str(tmp_path / "docs"))
+    get_settings.cache_clear()
+
+    _seed_policy(db_session, ats_min_score=0.9)
+    app, person, job = _seed_pipeline(db_session)
+
+    with pytest.raises(DocumentGenerationError, match="Truthfulness check failed"):
+        await generate_application_documents(
+            db_session,
+            app.id,
+            person.id,
+            job.id,
+            generator=_FabricatingReviser(),
             settings=get_settings(),
         )

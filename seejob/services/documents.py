@@ -163,6 +163,14 @@ def validate_document_truthfulness(markdown: str, person: Person) -> list[str]:
     return violations
 
 
+def _assert_document_truthful(label: str, markdown: str, person: Person) -> None:
+    violations = validate_document_truthfulness(markdown, person)
+    if violations:
+        raise DocumentGenerationError(
+            f"Truthfulness check failed for {label}: {'; '.join(violations[:3])}"
+        )
+
+
 async def _run_critic_loop(
     generator: DocumentGenerator,
     *,
@@ -172,8 +180,10 @@ async def _run_critic_loop(
     job_context: str,
     jd_text: str,
     min_score: float,
+    person: Person,
 ) -> tuple[str, float, str, bool]:
     """Run ATS critic with up to MAX_CRITIC_ITERATIONS revision passes."""
+    label = "CV" if doc_type == DocumentType.CV else "Cover letter"
     current = markdown
     last_result = critique_document(
         current,
@@ -195,6 +205,7 @@ async def _run_critic_loop(
             job_context=job_context,
             revision_notes=last_result.revision_notes,
         )
+        _assert_document_truthful(label, current, person)
         last_result = critique_document(
             current,
             jd_text=jd_text,
@@ -257,11 +268,7 @@ async def generate_application_documents(
     )
 
     for label, content in [("CV", cv_markdown), ("Cover letter", cover_markdown)]:
-        violations = validate_document_truthfulness(content, person)
-        if violations:
-            raise DocumentGenerationError(
-                f"Truthfulness check failed for {label}: {'; '.join(violations[:3])}"
-            )
+        _assert_document_truthful(label, content, person)
 
     min_score = policy.ats_min_score
 
@@ -273,6 +280,7 @@ async def generate_application_documents(
         job_context=job_context,
         jd_text=jd_text,
         min_score=min_score,
+        person=person,
     )
     cover_markdown, cl_score, cl_report, cl_passed = await _run_critic_loop(
         generator,
@@ -282,6 +290,7 @@ async def generate_application_documents(
         job_context=job_context,
         jd_text=jd_text,
         min_score=min_score,
+        person=person,
     )
 
     if not cv_passed or not cl_passed:
@@ -289,6 +298,9 @@ async def generate_application_documents(
             f"ATS critic did not pass after {MAX_CRITIC_ITERATIONS} iterations "
             f"(cv={cv_score:.2f}, cover={cl_score:.2f}, min={min_score:.2f})"
         )
+
+    for label, content in [("CV", cv_markdown), ("Cover letter", cover_markdown)]:
+        _assert_document_truthful(label, content, person)
 
     cfg.ensure_directories()
     doc_dir = cfg.documents_dir / f"app_{application_id}"

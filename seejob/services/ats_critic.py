@@ -147,11 +147,7 @@ def critique_document(
 
     keywords = extract_jd_keywords(jd_text)
     content_tokens = {_normalize_token(t) for t in _WORD_RE.findall(content_lower)}
-    matched = [
-        kw
-        for kw in keywords
-        if kw in content_lower or kw in content_tokens or any(tok.startswith(kw) for tok in content_tokens)
-    ]
+    matched = [kw for kw in keywords if kw in content_tokens]
     missing = [kw for kw in keywords if kw not in matched]
     keyword_coverage = (len(matched) / len(keywords)) if keywords else 1.0
 
@@ -210,9 +206,10 @@ def critique_document(
     format_score = max(0.0, format_score)
 
     score = 0.6 * keyword_coverage + 0.4 * format_score
-    passed = score >= min_score and not any(i.severity == "error" for i in issues)
+    has_errors = any(i.severity == "error" for i in issues)
+    passed = score >= min_score and not has_errors
 
-    if doc_type == "cover_letter" and keyword_coverage >= 0.25:
+    if doc_type == "cover_letter" and keyword_coverage >= 0.25 and not has_errors:
         passed = passed or score >= min_score * 0.9
 
     return CriticResult(
