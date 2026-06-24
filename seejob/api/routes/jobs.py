@@ -5,6 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from seejob.core.dependencies import get_session
+from seejob.core.exceptions import URLValidationError
+from seejob.core.url_safety import validate_job_url
 from seejob.models.job import Job, JobStatus
 from seejob.schemas.job import (
     JobCreate,
@@ -14,6 +16,7 @@ from seejob.schemas.job import (
     JobScoreRequest,
     JobStatusAction,
 )
+from seejob.services import profile as profile_service
 from seejob.services.jobs import JobReviewError, approve_job, get_job_queue, skip_job
 from seejob.services.policy import get_policy_config
 from seejob.services.scoring import score_job
@@ -53,9 +56,22 @@ def job_queue(db: Session = Depends(get_session)) -> JobQueueView:
 @router.post("/ingest-url", response_model=JobRead, status_code=status.HTTP_201_CREATED)
 async def ingest_job_url(data: JobIngestUrl, db: Session = Depends(get_session)) -> Job:
     """Manually add a job by scraping its posting URL."""
+    try:
+        validate_job_url(str(data.url))
+    except URLValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
     source = ManualUrlSource(str(data.url))
     try:
         raw_jobs = await source.fetch_new_jobs()
+    except URLValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -90,7 +106,6 @@ async def ingest_job_url(data: JobIngestUrl, db: Session = Depends(get_session))
 @router.post("", response_model=JobRead, status_code=201)
 def create_job(data: JobCreate, db: Session = Depends(get_session)) -> Job:
     """Register a newly discovered job."""
-    from seejob.models.job import hash_job_url, normalize_job_url
     from seejob.services.sourcing.base import RawJob
 
     raw = RawJob(
@@ -102,30 +117,20 @@ def create_job(data: JobCreate, db: Session = Depends(get_session)) -> Job:
         jd_text=data.jd_text,
         source=data.source,
     )
-    result = ingest_raw_job(db, raw, apply_filters=False)
+    result = ingest_raw_job(db, raw)
     if result.duplicate and result.job is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Job already exists (id={result.job.id})",
         )
-    if result.job is None:
-        job = Job(
-            url=normalize_job_url(str(data.url)),
-            url_hash=hash_job_url(str(data.url)),
-            title=data.title,
-            company=data.company,
-            location=data.location,
-            is_remote=data.is_remote,
-            jd_text=data.jd_text,
-            source=data.source,
-            fit_score=data.fit_score,
-            match_rationale=data.match_rationale,
-            status=JobStatus.NEW,
+    if result.filtered:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=result.filter_reason or "Job blocked by hard filters",
         )
-        db.add(job)
-        db.commit()
-        db.refresh(job)
-        return job
+    if result.job is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Ingest failed")
+
     if data.fit_score is not None:
         result.job.fit_score = data.fit_score
     if data.match_rationale is not None:
@@ -148,7 +153,7 @@ def trigger_job_score(
 
     try:
         score_job(db, job, data.person_id)
-    except ValueError as exc:
+    except profile_service.ProfileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     db.refresh(job)

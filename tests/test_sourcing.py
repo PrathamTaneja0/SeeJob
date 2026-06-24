@@ -170,7 +170,7 @@ async def test_manual_url_source_mock_http() -> None:
         lambda request: httpx.Response(200, text=SAMPLE_HTML, request=request)
     )
     async with httpx.AsyncClient(transport=transport) as client:
-        source = ManualUrlSource("https://acme.com/jobs/1", client=client)
+        source = ManualUrlSource("https://boards.greenhouse.io/acme/jobs/1", client=client)
         jobs = await source.fetch_new_jobs()
 
     assert len(jobs) == 1
@@ -283,7 +283,7 @@ def test_ingest_url_endpoint(client, db_session) -> None:
         new=AsyncMock(
             return_value=[
                 RawJob(
-                    url="https://acme.com/jobs/1",
+                    url="https://jobs.example.com/1",
                     title="Python Dev",
                     company="Acme",
                     jd_text="Python role",
@@ -294,7 +294,7 @@ def test_ingest_url_endpoint(client, db_session) -> None:
     ):
         response = client.post(
             "/api/v1/jobs/ingest-url",
-            json={"url": "https://acme.com/jobs/1"},
+            json={"url": "https://jobs.example.com/1"},
         )
 
     assert response.status_code == 201

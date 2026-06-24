@@ -13,8 +13,25 @@ ALLOWED_FETCH_HOSTS = frozenset(
         "linkedin.com",
         "www.linkedin.com",
         "github.com",
+        "www.github.com",
         "api.github.com",
     }
+)
+
+JOB_BOARD_HOST_SUFFIXES = (
+    "greenhouse.io",
+    "lever.co",
+    "myworkdayjobs.com",
+    "workday.com",
+    "linkedin.com",
+    "indeed.com",
+    "icims.com",
+    "smartrecruiters.com",
+    "ashbyhq.com",
+    "jobvite.com",
+    "bamboohr.com",
+    "recruitee.com",
+    "workable.com",
 )
 
 _BLOCKED_NETWORKS = (
@@ -72,3 +89,52 @@ def validate_fetch_url(url: str) -> None:
     else:
         if _is_blocked_ip(hostname):
             raise URLValidationError(f"Blocked IP address: {hostname}")
+
+
+def _normalize_host(host: str) -> str:
+    return host.lower().rstrip(".")
+
+
+def _validate_https_host(hostname: str) -> str:
+    host = _normalize_host(hostname)
+    if not host:
+        raise URLValidationError("URL must include a hostname")
+
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        try:
+            resolved_ips = _resolve_host_ips(host)
+        except URLValidationError:
+            resolved_ips = []
+        for ip in resolved_ips:
+            if _is_blocked_ip(ip):
+                raise URLValidationError(f"Host resolves to blocked address: {ip}")
+    else:
+        if _is_blocked_ip(host):
+            raise URLValidationError(f"Blocked IP address: {host}")
+
+    return host
+
+
+def _host_matches_job_allowlist(host: str) -> bool:
+    if host.startswith("jobs."):
+        return True
+    return any(host == suffix or host.endswith(f".{suffix}") for suffix in JOB_BOARD_HOST_SUFFIXES)
+
+
+def validate_job_url(url: str) -> None:
+    """Validate URL for job sourcing (job-board allowlist, no private IPs)."""
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        raise URLValidationError(
+            f"URL scheme {parsed.scheme!r} is not allowed; use HTTPS"
+        )
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise URLValidationError("URL has no hostname")
+
+    host = _validate_https_host(hostname)
+    if not _host_matches_job_allowlist(host):
+        raise URLValidationError(f"Host {host!r} is not an allowed job board")

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import httpx
 
+from seejob.core.url_safety import validate_job_url
 from seejob.services.sourcing.base import JobSource, RawJob
 from seejob.services.sourcing.parser import parse_job_html
 
@@ -36,7 +37,9 @@ class ManualUrlSource(JobSource):
             return await self._fetch(client)
 
     async def _fetch(self, client: httpx.AsyncClient) -> list[RawJob]:
+        validate_job_url(self._url)
         response = await client.get(self._url)
+        validate_job_url(str(response.url))
         response.raise_for_status()
         parsed = parse_job_html(response.text, self._url)
         return [

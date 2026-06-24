@@ -129,7 +129,7 @@ def score_job(
             threshold = filters.min_fit_score
 
     archived = fit_score < threshold
-    if archived and job.status == JobStatus.NEW:
+    if archived and job.status in (JobStatus.NEW, JobStatus.REVIEWED):
         job.status = JobStatus.ARCHIVED
 
     db.commit()

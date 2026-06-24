@@ -46,7 +46,7 @@ def apply_hard_filters(
             return FilterResult(False, f"blocked keyword: {keyword}")
 
     if job_filters is None:
-        return FilterResult(True)
+        job_filters = JobFilters()
 
     if job_filters.remote_only and not job.is_remote:
         if "remote" not in blob:
