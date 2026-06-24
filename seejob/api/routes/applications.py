@@ -12,6 +12,8 @@ from seejob.schemas.application import (
     ApplicationApplyResponse,
     ApplicationDocumentsView,
     ApplicationPipelineView,
+    ApplicationProvideOtpRequest,
+    ApplicationProvideOtpResponse,
     ApplicationRead,
     ApplicationResumeRequest,
     ApplicationResumeResponse,
@@ -20,6 +22,7 @@ from seejob.schemas.application import (
     DocumentGenerationResponse,
     GeneratedDocumentRead,
 )
+from seejob.services.auth import store_manual_otp
 from seejob.services.apply import ApplyError, run_application_apply
 from seejob.services.approval import ApprovalGateError, validate_approval_gates
 from seejob.services.documents import DocumentGenerationError, queue_document_generation
@@ -220,6 +223,28 @@ def approve_document(
     db.commit()
     db.refresh(doc)
     return doc
+
+
+@router.post("/{application_id}/provide-otp", response_model=ApplicationProvideOtpResponse)
+def provide_otp(
+    application_id: int,
+    data: ApplicationProvideOtpRequest,
+    db: Session = Depends(get_session),
+) -> ApplicationProvideOtpResponse:
+    """Inject a one-time password for auth_required login flows."""
+    app = db.scalar(select(Application).where(Application.id == application_id))
+    if app is None:
+        raise HTTPException(status_code=404, detail=f"Application {application_id} not found")
+    if app.status != ApplicationStatus.AUTH_REQUIRED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Application must be auth_required (current: {app.status.value})",
+        )
+    store_manual_otp(application_id, data.otp)
+    return ApplicationProvideOtpResponse(
+        application_id=application_id,
+        message="OTP queued for next login attempt",
+    )
 
 
 @router.post("/{application_id}/resume", response_model=ApplicationResumeResponse)

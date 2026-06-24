@@ -109,3 +109,16 @@ class ApplicationResumeResponse(BaseModel):
     status: ApplicationStatus
     status_message: str | None
     interrupt_metadata_json: str | None = None
+
+
+class ApplicationProvideOtpRequest(BaseModel):
+    """Manual OTP injection from dashboard during auth_required."""
+
+    otp: str
+
+
+class ApplicationProvideOtpResponse(BaseModel):
+    """Confirmation after OTP is queued for login."""
+
+    application_id: int
+    message: str

@@ -204,6 +204,58 @@ alembic/
 - Pipeline kanban, job queue, application detail, profiles, settings, agent console
 - FastAPI serves `dashboard/dist` at `/` when built; CORS for local dev
 
+### Phase 7 (current)
+- Gmail OTP fetcher (`seejob/integrations/gmail.py`) — IMAP with MCP-ready interface
+- Site account CRUD (`/api/v1/site-accounts`) — Fernet-encrypted credentials, masked passwords
+- Auth service (`seejob/services/auth.py`) — credential lookup, login hooks, session sync
+- CapSolver integration (`seejob/integrations/capsolver.py`) — Turnstile/reCAPTCHA when API key set
+- Manual OTP injection (`POST /api/v1/applications/{id}/provide-otp`)
+- Docker Compose production deploy (`docker-compose.yml`)
+
+## Production deploy (Docker)
+
+### Prerequisites
+
+- Docker and Docker Compose
+- Fernet key and secrets in `.env`
+
+### Build and run
+
+```bash
+# Build dashboard bundle (served by API at /)
+cd dashboard && npm install && npm run build && cd ..
+
+# Configure environment
+cp .env.example .env
+# Set SEEJOB_FERNET_KEY, GMAIL_* (optional OTP), SEEJOB_CAPSOLVER_API_KEY (optional)
+
+docker compose up -d --build
+```
+
+API: http://localhost:8000 — Swagger at `/docs`.
+
+### Environment variables (production)
+
+| Variable | Purpose |
+|----------|---------|
+| `SEEJOB_FERNET_KEY` | Encrypt site credentials and session cookies |
+| `SEEJOB_SECRET_KEY` | API signing (future auth) |
+| `SEEJOB_DATABASE_URL` | Set automatically in compose to PostgreSQL |
+| `GMAIL_IMAP_HOST` | Gmail IMAP host (default `imap.gmail.com`) |
+| `GMAIL_USER` | Gmail address for OTP fetch |
+| `GMAIL_APP_PASSWORD` | Gmail app password (not account password) |
+| `SEEJOB_CAPSOLVER_API_KEY` | CapSolver API key for captcha auto-solve |
+| `SEEJOB_VECTOR_ENABLED` | Enable Chroma vector store |
+| `SEEJOB_OPENAI_API_KEY` | LLM document generation |
+
+### Optional Chroma profile
+
+```bash
+docker compose --profile chroma up -d
+```
+
+Chroma listens on port 8100 when the profile is active.
+
 
 ## Security
 

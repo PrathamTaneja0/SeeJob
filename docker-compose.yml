@@ -1,0 +1,55 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      SEEJOB_HOST: "0.0.0.0"
+      SEEJOB_PORT: "8000"
+      SEEJOB_DATABASE_URL: "postgresql+psycopg2://seejob:seejob@db:5432/seejob"
+      SEEJOB_ENV: production
+      SEEJOB_DEBUG: "false"
+      SEEJOB_VECTOR_ENABLED: "${SEEJOB_VECTOR_ENABLED:-false}"
+      SEEJOB_CHROMA_PERSIST_DIR: /data/chroma
+      SEEJOB_BROWSER_PROFILES_DIR: /data/browser_profiles
+      SEEJOB_DOCUMENTS_DIR: /data/documents
+    volumes:
+      - seejob_data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: seejob
+      POSTGRES_PASSWORD: seejob
+      POSTGRES_DB: seejob
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U seejob -d seejob"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  chroma:
+    image: chromadb/chroma:latest
+    profiles:
+      - chroma
+    ports:
+      - "8100:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      IS_PERSISTENT: "TRUE"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  seejob_data:
+  chroma_data:

@@ -117,6 +117,24 @@ def test_apply_endpoint_dry_run_success(client, db_session, mock_actuator) -> No
     mock_actuator.close.assert_awaited_once()
 
 
+def test_apply_endpoint_auth_required_interrupt(client, db_session, mock_actuator) -> None:
+    _seed_policy(db_session)
+    app = _seed_ready_application(db_session)
+    mock_actuator.apply.return_value = ApplyFillResult(
+        result=BrowserActionResult.AUTH_REQUIRED,
+        message="Login required",
+        page_url="https://careers.example.com/login",
+    )
+
+    with patch("seejob.services.apply.PlaywrightActuator", return_value=mock_actuator):
+        response = client.post(f"/api/v1/applications/{app.id}/apply?dry_run=true")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["result"] == "auth_required"
+    assert data["status"] == "auth_required"
+
+
 def test_apply_endpoint_captcha_transitions_needs_manual(client, db_session, mock_actuator) -> None:
     _seed_policy(db_session)
     app = _seed_ready_application(db_session)

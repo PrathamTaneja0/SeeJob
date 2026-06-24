@@ -25,6 +25,12 @@ from seejob.browser.interfaces import (
 from seejob.core.config import Settings, get_settings
 from seejob.models.application import Application, DocumentType
 from seejob.services.ats_learning import normalize_domain, store_apply_learning
+from seejob.services.auth import (
+    get_credentials,
+    load_session_cookies,
+    save_session_cookies,
+    try_login,
+)
 from seejob.services.profile import get_person
 from seejob.services.qa import get_or_generate_answer
 
@@ -33,9 +39,12 @@ logger = logging.getLogger(__name__)
 CAPTCHA_SELECTORS = [
     'iframe[src*="recaptcha"]',
     'iframe[src*="hcaptcha"]',
+    'iframe[src*="challenges.cloudflare.com"]',
     ".g-recaptcha",
+    ".cf-turnstile",
     "#captcha",
     '[class*="captcha"]',
+    '[class*="turnstile"]',
 ]
 
 LOGIN_INDICATORS = [
@@ -113,6 +122,9 @@ class PlaywrightActuator(BrowserActuator):
         self._context: Any = None
         self._page: Any = None
         self._session: BrowserSession | None = None
+        self._person_id: int | None = None
+        self._application_id: int | None = None
+        self._db: Session | None = None
         self._form_context: Any = None
         self._artifacts_dir = Path("seejob/data/artifacts/screenshots")
 
@@ -143,11 +155,15 @@ class PlaywrightActuator(BrowserActuator):
         job_url = app.job.url
         domain = normalize_domain(job_url)
 
+        self._person_id = app.person_id
+        self._application_id = application_id
+        self._db = db
+
         session = BrowserSession(
             profile_dir=self._settings.browser_profiles_dir / domain,
             domain=domain,
         )
-        await self.launch(session)
+        await self.launch(session, db=db, person_id=app.person_id)
 
         nav_result = await self.navigate(job_url)
         if nav_result != BrowserActionResult.SUCCESS:
@@ -157,7 +173,7 @@ class PlaywrightActuator(BrowserActuator):
                 page_url=job_url,
             )
 
-        blocker = await self._detect_blockers()
+        blocker = await self._detect_and_resolve_blockers()
         if blocker != BrowserActionResult.SUCCESS:
             screenshot = await self._save_screenshot(application_id)
             return ApplyFillResult(
@@ -233,18 +249,26 @@ class PlaywrightActuator(BrowserActuator):
             page_url=self._page.url,
         )
 
-    async def launch(self, session: BrowserSession) -> None:
+    async def launch(
+        self,
+        session: BrowserSession,
+        *,
+        db: Session | None = None,
+        person_id: int | None = None,
+    ) -> None:
         """Launch browser with persisted profile/cookies."""
         from playwright.async_api import async_playwright
 
         self._session = session
+        self._db = db
+        self._person_id = person_id
         session.profile_dir.mkdir(parents=True, exist_ok=True)
         self._artifacts_dir.mkdir(parents=True, exist_ok=True)
 
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.chromium.launch(headless=self._headless)
         self._context = await self._browser.new_context()
-        await self._load_cookies(session)
+        await self._load_cookies(session, db=db, person_id=person_id)
         self._page = await self._context.new_page()
 
     async def navigate(self, url: str) -> BrowserActionResult:
@@ -299,13 +323,15 @@ class PlaywrightActuator(BrowserActuator):
         return BrowserActionResult.NEEDS_MANUAL
 
     async def save_session(self) -> BrowserSession:
-        """Persist cookies per domain."""
+        """Persist cookies per domain and sync to SiteAccount."""
         if self._context is None or self._session is None:
             raise RuntimeError("Browser not launched")
         cookies = await self._context.cookies()
         cookie_path = self._session.profile_dir / "cookies.json"
         cookie_path.write_text(json.dumps(cookies), encoding="utf-8")
         self._session.metadata["cookie_count"] = len(cookies)
+        if self._db is not None and self._person_id is not None:
+            save_session_cookies(self._db, self._person_id, self._session.domain, cookies)
         return self._session
 
     async def close(self) -> None:
@@ -320,17 +346,120 @@ class PlaywrightActuator(BrowserActuator):
         self._context = None
         self._browser = None
         self._playwright = None
+        self._person_id = None
+        self._application_id = None
+        self._db = None
 
-    async def _load_cookies(self, session: BrowserSession) -> None:
+    async def _load_cookies(
+        self,
+        session: BrowserSession,
+        *,
+        db: Session | None = None,
+        person_id: int | None = None,
+    ) -> None:
+        cookies: list[dict[str, Any]] | None = None
+        if db is not None and person_id is not None:
+            cookies = load_session_cookies(db, person_id, session.domain)
         cookie_path = session.profile_dir / "cookies.json"
-        if not cookie_path.exists() or self._context is None:
-            return
-        try:
-            cookies = json.loads(cookie_path.read_text(encoding="utf-8"))
-            if cookies:
+        if cookies is None and cookie_path.exists():
+            try:
+                cookies = json.loads(cookie_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError) as exc:
+                logger.debug("Could not load cookies for %s: %s", session.domain, exc)
+        if cookies and self._context is not None:
+            try:
                 await self._context.add_cookies(cookies)
-        except (json.JSONDecodeError, OSError) as exc:
-            logger.debug("Could not load cookies for %s: %s", session.domain, exc)
+            except Exception as exc:
+                logger.debug("Could not add cookies for %s: %s", session.domain, exc)
+
+    async def _detect_and_resolve_blockers(self) -> BrowserActionResult:
+        """Detect captcha/login blockers and attempt automated resolution."""
+        captcha = await self._detect_captcha()
+        if captcha:
+            solved = await self._try_solve_captcha()
+            if not solved:
+                return BrowserActionResult.CAPTCHA
+
+        auth = await self._detect_auth_required()
+        if auth:
+            logged_in = await self._try_auth_login()
+            if not logged_in:
+                return BrowserActionResult.AUTH_REQUIRED
+
+        return BrowserActionResult.SUCCESS
+
+    async def _detect_captcha(self) -> bool:
+        if self._page is None:
+            return False
+        for selector in CAPTCHA_SELECTORS:
+            if await self._page.query_selector(selector):
+                return True
+        page_text = (await self._page.content()).lower()
+        return "captcha" in page_text and ("recaptcha" in page_text or "turnstile" in page_text)
+
+    async def _detect_auth_required(self) -> bool:
+        if self._page is None:
+            return False
+        for selector in LOGIN_INDICATORS:
+            if await self._page.query_selector(selector):
+                return True
+        return False
+
+    async def _try_solve_captcha(self) -> bool:
+        """Attempt CapSolver when API key is configured."""
+        if self._page is None:
+            return False
+        from seejob.integrations.capsolver import solve_recaptcha_v2, solve_turnstile
+
+        page_url = self._page.url
+        site_key = await self._page.evaluate(
+            """() => {
+                const turnstile = document.querySelector('[data-sitekey]');
+                if (turnstile) return turnstile.getAttribute('data-sitekey');
+                const recaptcha = document.querySelector('.g-recaptcha');
+                if (recaptcha) return recaptcha.getAttribute('data-sitekey');
+                return null;
+            }"""
+        )
+        if not site_key:
+            return False
+
+        is_turnstile = await self._page.query_selector(".cf-turnstile, iframe[src*='turnstile']")
+        token = (
+            solve_turnstile(page_url, site_key, settings=self._settings)
+            if is_turnstile
+            else solve_recaptcha_v2(page_url, site_key, settings=self._settings)
+        )
+        if not token:
+            return False
+
+        await self._page.evaluate(
+            """(token) => {
+                const textarea = document.querySelector('[name="g-recaptcha-response"]')
+                    || document.querySelector('[name="cf-turnstile-response"]');
+                if (textarea) textarea.value = token;
+            }""",
+            token,
+        )
+        await self._page.wait_for_timeout(1500)
+        return not await self._detect_captcha()
+
+    async def _try_auth_login(self) -> bool:
+        """Attempt login with stored credentials and OTP."""
+        if self._page is None or self._db is None or self._person_id is None or self._session is None:
+            return False
+        credentials = get_credentials(self._db, self._person_id, self._session.domain)
+        if credentials is None:
+            return False
+        success = await try_login(
+            self._page,
+            credentials,
+            domain=self._session.domain,
+            application_id=self._application_id,
+        )
+        if success:
+            await self.save_session()
+        return success
 
     async def _detect_blockers(self) -> BrowserActionResult:
         if self._page is None:

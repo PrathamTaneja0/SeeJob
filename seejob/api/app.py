@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from seejob import __version__
-from seejob.api.routes import applications, events, health, jobs, policy, profiles
+from seejob.api.routes import applications, events, health, jobs, policy, profiles, site_accounts
 from seejob.core.config import get_settings
 from seejob.core.database import engine
 from seejob.models.base import Base
@@ -59,6 +59,9 @@ def create_app() -> FastAPI:
     app.include_router(applications.router, prefix="/api/v1/applications", tags=["applications"])
     app.include_router(events.router, prefix="/api/v1/events", tags=["events"])
     app.include_router(policy.router, prefix="/api/v1/policy", tags=["policy"])
+    app.include_router(
+        site_accounts.router, prefix="/api/v1/site-accounts", tags=["site-accounts"]
+    )
 
     if _DASHBOARD_DIST.is_dir():
         assets_dir = _DASHBOARD_DIST / "assets"

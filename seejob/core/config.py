@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +16,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         env_prefix="SEEJOB_",
         extra="ignore",
+        populate_by_name=True,
     )
 
     env: Literal["development", "test", "staging", "production"] = "development"
@@ -52,6 +53,23 @@ class Settings(BaseSettings):
     embedding_provider: Literal["sentence_transformers", "openai", "hash"] = "hash"
 
     sourcing_cron: str = "0 8 * * *"
+
+    gmail_imap_host: str = Field(
+        default="imap.gmail.com",
+        validation_alias=AliasChoices("SEEJOB_GMAIL_IMAP_HOST", "GMAIL_IMAP_HOST"),
+    )
+    gmail_user: str = Field(
+        default="",
+        validation_alias=AliasChoices("SEEJOB_GMAIL_USER", "GMAIL_USER"),
+    )
+    gmail_app_password: str = Field(
+        default="",
+        validation_alias=AliasChoices("SEEJOB_GMAIL_APP_PASSWORD", "GMAIL_APP_PASSWORD"),
+    )
+    capsolver_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("SEEJOB_CAPSOLVER_API_KEY", "CAPSOLVER_API_KEY"),
+    )
 
     @field_validator("cors_origins", mode="before")
     @classmethod
