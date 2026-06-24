@@ -13,7 +13,11 @@ from sqlalchemy.orm import Session
 
 from seejob.core.database import SessionLocal
 from seejob.services.events import emit_event
-from seejob.services.pipeline import PipelineAction, find_pipeline_candidates, run_pipeline_for_application
+from seejob.services.pipeline import (
+    PipelineAction,
+    find_pipeline_candidates,
+    run_pipeline_for_application,
+)
 from seejob.services.policy import get_policy_config
 from seejob.services.rate_limit import RateLimitExceeded
 from seejob.workers.base import WorkerResult, WorkerStatus
@@ -161,10 +165,14 @@ async def run_scheduler_worker(
             dry_run=dry_run,
             skip_sourcing=skip_sourcing,
         )
-        status = WorkerStatus.FAILED if result.errors and result.pipeline_processed == 0 else WorkerStatus.COMPLETED
+        failed_status = (
+            WorkerStatus.FAILED
+            if result.errors and result.pipeline_processed == 0
+            else WorkerStatus.COMPLETED
+        )
         return WorkerResult(
             worker_name="scheduler",
-            status=status,
+            status=failed_status,
             items_processed=result.pipeline_processed,
             message=result.summary,
             started_at=started,
@@ -189,7 +197,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Run one SeeJob scheduler tick (sourcing + pipeline queue)"
     )
-    parser.add_argument("--person-id", type=int, default=None, help="Score ingested jobs for person")
+    parser.add_argument(
+        "--person-id", type=int, default=None, help="Score ingested jobs for person"
+    )
     parser.add_argument("--dry-run", action="store_true", help="Apply without submitting forms")
     parser.add_argument("--skip-sourcing", action="store_true", help="Only process pipeline queue")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")

@@ -6,19 +6,24 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from seejob.models.application import Application, ApplicationStatus, DocumentType, GeneratedDocument
+from seejob.models.application import (
+    Application,
+    ApplicationStatus,
+    DocumentType,
+    GeneratedDocument,
+)
 from seejob.models.job import Job, JobStatus
 from seejob.models.person import Person, WorkAuthorization
 from seejob.models.policy import PolicyConfig
 from seejob.services.events import clear_events, list_events
 from seejob.services.pipeline import PipelineAction, PipelineResult
 from seejob.services.sourcing.pipeline import SourcingRunResult
+from seejob.workers.base import WorkerStatus
 from seejob.workers.scheduler import (
     process_approved_pipeline_queue,
     run_scheduled_tick,
     run_scheduler_worker,
 )
-from seejob.workers.base import WorkerStatus
 
 
 def _seed_policy(db_session, **overrides) -> PolicyConfig:

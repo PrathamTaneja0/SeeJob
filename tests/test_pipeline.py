@@ -8,12 +8,21 @@ import pytest
 
 from seejob.browser.actuator import ApplyFillResult
 from seejob.browser.interfaces import BrowserActionResult
-from seejob.models.application import Application, ApplicationStatus, DocumentType, GeneratedDocument
+from seejob.models.application import (
+    Application,
+    ApplicationStatus,
+    DocumentType,
+    GeneratedDocument,
+)
 from seejob.models.job import Job, JobStatus
 from seejob.models.person import Person, WorkAuthorization
 from seejob.models.policy import PolicyConfig
 from seejob.services.events import clear_events, list_events
-from seejob.services.pipeline import PipelineAction, find_pipeline_candidates, run_pipeline_for_application
+from seejob.services.pipeline import (
+    PipelineAction,
+    find_pipeline_candidates,
+    run_pipeline_for_application,
+)
 from seejob.services.rate_limit import RateLimitExceeded, check_rate_limit, record_apply_run
 
 
@@ -110,7 +119,11 @@ async def test_pipeline_generates_docs_with_auto_apply(db_session) -> None:
         result = await run_pipeline_for_application(db_session, app.id)
 
     mock_gen.assert_called_once_with(db_session, app.id)
-    assert result.action in (PipelineAction.DOCS_GENERATED, PipelineAction.SKIPPED, PipelineAction.APPLIED)
+    assert result.action in (
+        PipelineAction.DOCS_GENERATED,
+        PipelineAction.SKIPPED,
+        PipelineAction.APPLIED,
+    )
 
 
 @pytest.mark.asyncio

@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from seejob.browser.interfaces import BrowserActionResult
 from seejob.browser.interfaces import BrowserActionResult
 from seejob.models.application import Application, ApplicationStatus
 from seejob.models.job import Job, JobStatus
@@ -25,7 +24,7 @@ from seejob.services.state_machine import InvalidTransitionError, transition
 logger = logging.getLogger(__name__)
 
 
-class PipelineAction(str, Enum):
+class PipelineAction(StrEnum):
     """Outcome category for a pipeline step."""
 
     SKIPPED = "skipped"

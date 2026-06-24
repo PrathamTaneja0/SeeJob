@@ -1,6 +1,11 @@
 """Tests for interrupt handling and resume API."""
 
-from seejob.models.application import Application, ApplicationStatus, DocumentType, GeneratedDocument
+from seejob.models.application import (
+    Application,
+    ApplicationStatus,
+    DocumentType,
+    GeneratedDocument,
+)
 from seejob.models.job import Job, JobStatus
 from seejob.models.person import Person, WorkAuthorization
 from seejob.models.policy import PolicyConfig
