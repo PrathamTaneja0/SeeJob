@@ -1,4 +1,4 @@
-"""Add unique constraint on applications (person_id, job_id)."""
+﻿"""Add unique constraint on applications (person_id, job_id)."""
 
 from typing import Sequence, Union
 
@@ -12,13 +12,14 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Prevent duplicate applications for the same person and job."""
-    op.create_unique_constraint(
-        "uq_application_person_job",
-        "applications",
-        ["person_id", "job_id"],
-    )
+    with op.batch_alter_table("applications") as batch_op:
+        batch_op.create_unique_constraint(
+            "uq_application_person_job",
+            ["person_id", "job_id"],
+        )
 
 
 def downgrade() -> None:
     """Remove the person/job uniqueness constraint."""
-    op.drop_constraint("uq_application_person_job", "applications", type_="unique")
+    with op.batch_alter_table("applications") as batch_op:
+        batch_op.drop_constraint("uq_application_person_job", type_="unique")
