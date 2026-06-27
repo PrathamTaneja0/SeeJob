@@ -31,6 +31,15 @@ logger = logging.getLogger(__name__)
 
 MAX_CRITIC_ITERATIONS = 3
 
+# Standalone calendar years only — avoids false positives on arbitrary 4-digit tokens
+# (e.g. profile_len=1263 in mock generator HTML comments).
+_PLAUSIBLE_YEAR = r"(?:19\d{2}|20[0-9]\d|2100)"
+_DATE_MENTION_PATTERN = re.compile(
+    rf"\b((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+"
+    rf"{_PLAUSIBLE_YEAR}|{_PLAUSIBLE_YEAR})\b",
+    re.IGNORECASE,
+)
+
 
 class DocumentGenerationError(ValueError):
     """Raised when document generation cannot complete."""
@@ -138,11 +147,7 @@ def validate_document_truthfulness(markdown: str, person: Person) -> list[str]:
         if not _field_grounded_in_source(employer, profile_context):
             violations.append(f"Possible fabricated employer: {employer}")
 
-    date_patterns = re.findall(
-        r"\b((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4}|\d{4})\b",
-        markdown,
-        re.IGNORECASE,
-    )
+    date_patterns = _DATE_MENTION_PATTERN.findall(markdown)
     profile_dates = set()
     for exp in person.experiences:
         profile_dates.add(str(exp.start_date.year))

@@ -221,6 +221,62 @@ def test_critique_document_pass_and_fail() -> None:
     assert bad.issues
 
 
+def test_validate_document_truthfulness_ignores_non_year_numbers(db_session) -> None:
+    """Arbitrary 4-digit tokens outside 1900-2100 are not treated as dates."""
+    person = Person(
+        full_name="Jane",
+        email="jane@example.com",
+        work_authorization=WorkAuthorization.CITIZEN,
+    )
+    db_session.add(person)
+    db_session.flush()
+    db_session.add(
+        Experience(
+            person_id=person.id,
+            company="Acme Corp",
+            title="Engineer",
+            start_date=date(2020, 1, 1),
+            is_current=True,
+        )
+    )
+    db_session.commit()
+
+    markdown = (
+        "# Jane Applicant\n\n"
+        "<!-- profile_len=1263 jd_len=512 -->\n"
+        "Software Engineer at Acme Corp."
+    )
+    violations = validate_document_truthfulness(markdown, person)
+    assert not any("1263" in v for v in violations)
+
+
+def test_validate_document_truthfulness_flags_unverified_year(db_session) -> None:
+    """Plausible years not in the verified profile are flagged."""
+    person = Person(
+        full_name="Jane",
+        email="jane@example.com",
+        work_authorization=WorkAuthorization.CITIZEN,
+    )
+    db_session.add(person)
+    db_session.flush()
+    db_session.add(
+        Experience(
+            person_id=person.id,
+            company="Acme Corp",
+            title="Engineer",
+            start_date=date(2020, 1, 1),
+            is_current=True,
+        )
+    )
+    db_session.commit()
+
+    violations = validate_document_truthfulness(
+        "Worked at Acme Corp as CTO since 2019.",
+        person,
+    )
+    assert any("2019" in v for v in violations)
+
+
 def test_validate_document_truthfulness_flags_unknown_employer(db_session) -> None:
     """Truthfulness check rejects fabricated employers."""
     person = Person(
