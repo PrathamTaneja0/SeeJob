@@ -61,6 +61,20 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 
 Add to .env as SEEJOB_FERNET_KEY=...
 
+### OpenRouter (free models)
+
+SeeJob uses an OpenAI-compatible chat API. [OpenRouter](https://openrouter.ai/) works with the same client — set your OpenRouter key and base URL in `.env`:
+
+```bash
+SEEJOB_OPENAI_API_KEY=sk-or-v1-your-key-from-openrouter.ai/keys
+SEEJOB_OPENAI_BASE_URL=https://openrouter.ai/api/v1
+SEEJOB_LLM_MODEL=openrouter/free
+```
+
+`openrouter/free` is OpenRouter’s free router (picks from available free models). For a specific model, use its slug from the OpenRouter catalog. Document generation, job scoring, Q&A answers, and field mapping all read `SEEJOB_OPENAI_BASE_URL` and `SEEJOB_LLM_MODEL` from settings.
+
+For local dev without an API key, set `SEEJOB_ALLOW_MOCK_LLM=true` (development/test only).
+
 ### API docs
 
 - Swagger UI: http://127.0.0.1:8000/docs
@@ -112,7 +126,13 @@ npm run dev
 
 Open http://localhost:5173
 
-Optional: set `VITE_API_URL=http://127.0.0.1:8000` in `dashboard/.env` to call the API directly (CORS is enabled for `:5173`).
+**502 Bad Gateway on `/api/*`?** Vite proxies to `http://127.0.0.1:8000`. A 502 means the SeeJob API is not running or is on a different port. Fix:
+
+1. In a separate terminal, from the repo root: `seejob` (or `uvicorn seejob.api.app:app --host 127.0.0.1 --port 8000`)
+2. Confirm the API responds: http://127.0.0.1:8000/health → `{"status":"ok"}`
+3. If you changed `SEEJOB_PORT` in `.env`, set `VITE_API_URL=http://127.0.0.1:<port>` in `dashboard/.env` so the proxy matches
+
+Optional: set `VITE_API_URL=http://127.0.0.1:8000` in `dashboard/.env` to call the API directly (CORS must include `:5173` — see `SEEJOB_CORS_ORIGINS` in `.env.example`).
 
 ### Production build
 
@@ -246,7 +266,20 @@ API: http://localhost:8000 — Swagger at `/docs`.
 | `GMAIL_APP_PASSWORD` | Gmail app password (not account password) |
 | `SEEJOB_CAPSOLVER_API_KEY` | CapSolver API key for captcha auto-solve |
 | `SEEJOB_VECTOR_ENABLED` | Enable Chroma vector store |
-| `SEEJOB_OPENAI_API_KEY` | LLM document generation |
+| `SEEJOB_OPENAI_API_KEY` | LLM document generation (OpenAI or OpenRouter key) |
+| `SEEJOB_OPENAI_BASE_URL` | OpenAI-compatible API base (default OpenAI; use OpenRouter URL for free tier) |
+| `SEEJOB_LLM_MODEL` | Chat model slug (e.g. `gpt-4o-mini` or `openrouter/free`) |
+
+### Gmail OTP (optional)
+
+`GMAIL_USER` and `GMAIL_APP_PASSWORD` are **optional**. They are only used for automatic one-time-password fetch over IMAP during ATS login flows.
+
+If you skip Gmail setup, you can still apply to jobs:
+
+- Paste the OTP in the dashboard: `POST /api/v1/applications/{id}/provide-otp`
+- Or complete login/captcha in the browser when the application enters `needs_manual`
+
+See [docs/CAPTCHA.md](docs/CAPTCHA.md) for captcha handling and [docs/DEPLOY_CLOUDFLARE.md](docs/DEPLOY_CLOUDFLARE.md) for Cloudflare deployment options.
 
 ### Optional Chroma profile
 
