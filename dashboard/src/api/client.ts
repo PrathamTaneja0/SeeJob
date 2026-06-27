@@ -78,6 +78,9 @@ export const api = {
       body: JSON.stringify({ approved }),
     }),
 
+  documentDownloadUrl: (applicationId: number, docId: number) =>
+    `${API_BASE}/api/v1/applications/${applicationId}/documents/${docId}/download`,
+
   applyApplication: (
     id: number,
     dryRun: boolean,

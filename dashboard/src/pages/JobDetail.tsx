@@ -3,10 +3,19 @@ import { Link, useParams } from 'react-router-dom'
 import { api } from '../api/client'
 import { ErrorState } from '../components/ErrorState'
 import { LoadingSkeleton } from '../components/LoadingSkeleton'
+import { MatchRationaleCard } from '../components/MatchRationaleCard'
+import { SourceBadge } from '../components/SourceBadge'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { PageContainer } from '../components/ui/PageContainer'
 import { PageHeader } from '../components/ui/PageHeader'
+
+function formatJobDescription(text: string): string[] {
+  return text
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+}
 
 export function JobDetail() {
   const { id } = useParams<{ id: string }>()
@@ -36,6 +45,8 @@ export function JobDetail() {
     )
   }
 
+  const jdParagraphs = job.jd_text ? formatJobDescription(job.jd_text) : []
+
   return (
     <PageContainer narrow>
       <Link
@@ -56,22 +67,33 @@ export function JobDetail() {
               </Link>
             ) : (
               <a href={job.url} target="_blank" rel="noopener noreferrer">
-                <Button variant="secondary">Open posting ↗</Button>
+                <Button>Open job posting ↗</Button>
               </a>
             )
           }
         />
       </div>
 
-      <div className="mb-6 flex flex-wrap gap-2 text-sm text-slate-500">
+      <div className="mb-6 flex flex-wrap items-center gap-2">
+        <SourceBadge source={job.source} />
         {job.is_remote && (
-          <span className="rounded bg-blue-100 px-2 py-0.5 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+          <span className="rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
             Remote
           </span>
         )}
-        <span className="capitalize">{job.status.replace(/_/g, ' ')}</span>
-        <span>· {job.source}</span>
+        <span className="text-sm capitalize text-slate-500">
+          {job.status.replace(/_/g, ' ')}
+        </span>
       </div>
+
+      <a
+        href={job.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mb-6 inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600"
+      >
+        Open job posting ↗
+      </a>
 
       {(job.fit_score != null || job.match_rationale) && (
         <Card className="mb-6">
@@ -90,34 +112,38 @@ export function JobDetail() {
               </div>
             </div>
           )}
-          {job.match_rationale && (
-            <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">
-              {job.match_rationale}
-            </p>
-          )}
+          {job.match_rationale && <MatchRationaleCard rationale={job.match_rationale} />}
         </Card>
       )}
 
-      {job.jd_text && (
+      {application && (
         <Card className="mb-6">
-          <h3 className="mb-3 font-semibold text-slate-900 dark:text-slate-100">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            Pipeline application{' '}
+            <Link
+              to={`/applications/${application.id}`}
+              className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+            >
+              #{application.id}
+            </Link>{' '}
+            · <span className="capitalize">{application.status.replace(/_/g, ' ')}</span>
+          </p>
+        </Card>
+      )}
+
+      {jdParagraphs.length > 0 && (
+        <Card className="mb-6">
+          <h3 className="mb-4 font-semibold text-slate-900 dark:text-slate-100">
             Job Description
           </h3>
-          <pre className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">
-            {job.jd_text}
-          </pre>
+          <div className="prose prose-sm max-w-none dark:prose-invert">
+            {jdParagraphs.map((para, idx) => (
+              <p key={idx} className="text-slate-700 dark:text-slate-300">
+                {para}
+              </p>
+            ))}
+          </div>
         </Card>
-      )}
-
-      {!application && (
-        <a
-          href={job.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-sm text-indigo-600 hover:underline dark:text-indigo-400"
-        >
-          Open posting ↗
-        </a>
       )}
     </PageContainer>
   )

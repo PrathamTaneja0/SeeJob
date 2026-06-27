@@ -63,6 +63,7 @@ export function ProfileEditor() {
   const [uploadMsg, setUploadMsg] = useState<{ text: string; ok: boolean } | null>(null)
   const [docLabel, setDocLabel] = useState('')
   const [cvDragOver, setCvDragOver] = useState(false)
+  const [lastCvIngestAt, setLastCvIngestAt] = useState<string | null>(null)
 
   const { data: profiles, isLoading, error, refetch } = useQuery({
     queryKey: ['profiles'],
@@ -102,6 +103,7 @@ export function ProfileEditor() {
   const ingestMutation = useMutation({
     mutationFn: ({ id, file }: { id: number; file: File }) => api.ingestCv(id, file),
     onSuccess: (result) => {
+      setLastCvIngestAt(new Date().toISOString())
       setUploadMsg({ text: formatIngestMessage(result), ok: true })
       queryClient.invalidateQueries({ queryKey: ['profiles'] })
       if (selectedId) {
@@ -146,7 +148,15 @@ export function ProfileEditor() {
     const person = await api.getProfile(id)
     setForm(person)
     setUploadMsg(null)
+    setLastCvIngestAt(null)
   }
+
+  const hasMasterCv =
+    (form.experiences?.length ?? 0) > 0 ||
+    (form.skills?.length ?? 0) > 0 ||
+    Boolean(form.summary?.trim())
+
+  const cvIngestDate = lastCvIngestAt ?? (hasMasterCv ? form.updated_at : null)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -345,58 +355,89 @@ export function ProfileEditor() {
           </Card>
 
           {selectedId && (
-            <>
-              <Card>
-                <h4 className="mb-4 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Upload CV (PDF, DOCX, TXT)
-                </h4>
-                <input
-                  ref={cvInputRef}
-                  type="file"
-                  accept=".pdf,.docx,.txt"
-                  className="hidden"
-                  onChange={(e) => {
-                    handleCvFile(e.target.files?.[0])
-                    e.target.value = ''
-                  }}
-                />
-                <div
-                  onDragOver={(e) => {
-                    e.preventDefault()
-                    setCvDragOver(true)
-                  }}
-                  onDragLeave={() => setCvDragOver(false)}
-                  onDrop={(e) => {
-                    e.preventDefault()
-                    setCvDragOver(false)
-                    handleCvFile(e.dataTransfer.files[0])
-                  }}
-                  className={`rounded-lg border-2 border-dashed p-6 text-center transition-colors ${
-                    cvDragOver
-                      ? 'border-indigo-400 bg-indigo-50 dark:border-indigo-500 dark:bg-indigo-950/30'
-                      : 'border-slate-300 dark:border-slate-600'
-                  }`}
-                >
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
-                    Drag and drop your master CV here, or
-                  </p>
-                  <Button
-                    className="mt-3"
-                    onClick={() => cvInputRef.current?.click()}
-                    disabled={ingestMutation.isPending}
-                  >
-                    {ingestMutation.isPending ? 'Uploading…' : 'Upload CV'}
-                  </Button>
-                </div>
-              </Card>
+            <Card>
+              <h4 className="mb-4 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                Your documents
+              </h4>
 
-              <Card>
-                <h4 className="mb-4 text-sm font-semibold text-slate-900 dark:text-slate-100">
+              <div className="mb-6 rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                      Master CV
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {hasMasterCv
+                        ? cvIngestDate
+                          ? `Ingested ${new Date(cvIngestDate).toLocaleString(undefined, {
+                              dateStyle: 'medium',
+                              timeStyle: 'short',
+                            })}`
+                          : 'Ingested — profile populated from CV'
+                        : 'Not ingested yet — upload your master CV below'}
+                    </p>
+                  </div>
+                  <span
+                    className={`rounded px-2 py-0.5 text-xs font-medium ${
+                      hasMasterCv
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                    }`}
+                  >
+                    {hasMasterCv ? 'Ingested' : 'Missing'}
+                  </span>
+                </div>
+              </div>
+
+              <h5 className="mb-3 text-sm font-medium text-slate-700 dark:text-slate-300">
+                Upload CV (PDF, DOCX, TXT)
+              </h5>
+              <input
+                ref={cvInputRef}
+                type="file"
+                accept=".pdf,.docx,.txt"
+                className="hidden"
+                onChange={(e) => {
+                  handleCvFile(e.target.files?.[0])
+                  e.target.value = ''
+                }}
+              />
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  setCvDragOver(true)
+                }}
+                onDragLeave={() => setCvDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  setCvDragOver(false)
+                  handleCvFile(e.dataTransfer.files[0])
+                }}
+                className={`rounded-lg border-2 border-dashed p-6 text-center transition-colors ${
+                  cvDragOver
+                    ? 'border-indigo-400 bg-indigo-50 dark:border-indigo-500 dark:bg-indigo-950/30'
+                    : 'border-slate-300 dark:border-slate-600'
+                }`}
+              >
+                <p className="text-sm text-slate-600 dark:text-slate-400">
+                  Drag and drop your master CV here, or
+                </p>
+                <Button
+                  className="mt-3"
+                  onClick={() => cvInputRef.current?.click()}
+                  disabled={ingestMutation.isPending}
+                >
+                  {ingestMutation.isPending ? 'Uploading…' : 'Upload CV'}
+                </Button>
+              </div>
+
+              <div className="mt-8 border-t border-slate-200 pt-6 dark:border-slate-700">
+                <h5 className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-300">
                   Supporting documents
-                </h4>
+                </h5>
                 <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
-                  Upload portfolio writeups, certifications, cover letter templates, or project
-                  docs (PDF, DOCX, TXT). Content is indexed for RAG during document generation.
+                  Portfolio writeups, certifications, cover letter templates, or project docs
+                  (PDF, DOCX, TXT). Indexed for RAG during document generation.
                 </p>
                 <div className="mb-4 grid gap-4 sm:grid-cols-2">
                   <FormField
@@ -438,7 +479,15 @@ export function ProfileEditor() {
                           <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
                             {doc.label ?? doc.filename}
                           </p>
-                          <p className="truncate text-xs text-slate-500">{doc.filename}</p>
+                          <p className="truncate text-xs text-slate-500">
+                            {doc.filename}
+                            {' · '}
+                            {new Date(doc.uploaded_at).toLocaleDateString(undefined, {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })}
+                          </p>
                         </div>
                         <Button
                           variant="danger"
@@ -456,8 +505,8 @@ export function ProfileEditor() {
                 ) : (
                   <p className="text-sm text-slate-400">No supporting documents yet.</p>
                 )}
-              </Card>
-            </>
+              </div>
+            </Card>
           )}
 
           {uploadMsg && (

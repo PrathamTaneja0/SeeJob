@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import { ErrorState } from '../components/ErrorState'
 import { CardSkeleton } from '../components/LoadingSkeleton'
+import { SourceBadge } from '../components/SourceBadge'
 import { Button } from '../components/ui/Button'
 import { PageContainer } from '../components/ui/PageContainer'
 import { PageHeader } from '../components/ui/PageHeader'
@@ -58,7 +59,7 @@ export function JobQueue() {
     <PageContainer>
       <PageHeader
         title="Job Queue"
-        subtitle="Review discovered jobs and approve targeting for your profile."
+        subtitle="Review discovered jobs and approve targeting for your profile. Jobs are added via manual POST, Ingest URL, RSS feeds (policy), or seejob-sourcing — not auto LinkedIn unless you configure RSS."
       />
 
       {!defaultPersonId && (
@@ -79,7 +80,17 @@ export function JobQueue() {
             </div>
             <ul className="divide-y divide-slate-100 dark:divide-slate-800">
               {data.jobs.length === 0 ? (
-                <li className="px-6 py-6 text-center text-sm text-slate-400">No jobs</li>
+                <li className="px-6 py-6 text-center text-sm text-slate-400">
+                  {key === 'to_review' ? (
+                    <>
+                      No jobs yet.
+                      <br />
+                      Add jobs via Ingest URL or run seejob-sourcing.
+                    </>
+                  ) : (
+                    'No jobs'
+                  )}
+                </li>
               ) : (
                 data.jobs.map((job) => (
                   <li key={job.id} className="px-6 py-3">
@@ -96,6 +107,9 @@ export function JobQueue() {
                           {job.location && (
                             <span className="ml-1 text-slate-400">· {job.location}</span>
                           )}
+                          <span className="ml-2 inline-flex align-middle">
+                            <SourceBadge source={job.source} />
+                          </span>
                           {job.fit_score != null && (
                             <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
                               {(job.fit_score * 100).toFixed(0)}% fit

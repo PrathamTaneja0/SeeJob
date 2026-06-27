@@ -14,6 +14,21 @@ export type JobStatus = 'new' | 'reviewed' | 'archived' | 'applied' | 'rejected'
 
 export type DocumentType = 'cv' | 'cover_letter' | 'other'
 
+export interface CriticIssue {
+  code: string
+  message: string
+  severity: 'error' | 'warning' | 'info' | string
+}
+
+export interface CriticReport {
+  score: number
+  passed: boolean
+  keyword_coverage: number
+  matched_keywords?: string[]
+  missing_keywords?: string[]
+  issues: CriticIssue[]
+}
+
 export interface GeneratedDocument {
   id: number
   doc_type: DocumentType

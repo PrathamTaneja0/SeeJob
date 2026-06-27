@@ -1,13 +1,15 @@
 """Application pipeline endpoints."""
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from seejob.core.dependencies import get_session
-from seejob.models.application import Application, ApplicationStatus, GeneratedDocument
+from seejob.models.application import Application, ApplicationStatus, DocumentType, GeneratedDocument
 from seejob.schemas.application import (
     ApplicationApplyResponse,
     ApplicationDocumentsView,
@@ -188,6 +190,39 @@ def get_application_documents(
         application_id=app.id,
         status=app.status,
         documents=app.documents,
+    )
+
+
+@router.get("/{application_id}/documents/{doc_id}/download")
+def download_document(
+    application_id: int,
+    doc_id: int,
+    db: Session = Depends(get_session),
+) -> FileResponse:
+    """Download the generated PDF for an application document."""
+    app = db.scalar(
+        select(Application)
+        .where(Application.id == application_id)
+        .options(selectinload(Application.documents))
+    )
+    if app is None:
+        raise HTTPException(status_code=404, detail=f"Application {application_id} not found")
+
+    doc = next((d for d in app.documents if d.id == doc_id), None)
+    if doc is None:
+        raise HTTPException(status_code=404, detail=f"Document {doc_id} not found")
+    if not doc.pdf_path:
+        raise HTTPException(status_code=404, detail="PDF has not been generated for this document")
+
+    pdf_path = Path(doc.pdf_path)
+    if not pdf_path.is_file():
+        raise HTTPException(status_code=404, detail="PDF file not found on disk")
+
+    filename = "cv.pdf" if doc.doc_type == DocumentType.CV else "cover_letter.pdf"
+    return FileResponse(
+        pdf_path,
+        media_type="application/pdf",
+        filename=filename,
     )
 
 

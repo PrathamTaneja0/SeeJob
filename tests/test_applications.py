@@ -195,3 +195,19 @@ def test_patch_status_clears_interrupt_when_leaving_needs_manual(client, db_sess
     assert data["status"] == "failed"
     assert data["interrupt_metadata_json"] is None
 
+
+def test_download_document_pdf(client, db_session, tmp_path) -> None:
+    """GET /documents/{doc_id}/download serves the generated PDF file."""
+    _seed_policy(db_session)
+    app = _seed_application(db_session, doc_approved=False)
+    pdf_path = tmp_path / "cv.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4 test")
+    doc = db_session.query(GeneratedDocument).filter_by(application_id=app.id).one()
+    doc.pdf_path = str(pdf_path)
+    db_session.commit()
+
+    response = client.get(f"/api/v1/applications/{app.id}/documents/{doc.id}/download")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content.startswith(b"%PDF")
+

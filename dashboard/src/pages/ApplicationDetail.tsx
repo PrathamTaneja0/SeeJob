@@ -3,6 +3,7 @@ import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api/client'
+import { AtsReport, parseCriticReport } from '../components/AtsReport'
 import { ErrorState } from '../components/ErrorState'
 import { LoadingSkeleton } from '../components/LoadingSkeleton'
 import { StatusBadge } from '../components/StatusBadge'
@@ -10,6 +11,7 @@ import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { PageContainer } from '../components/ui/PageContainer'
 import { PageHeader } from '../components/ui/PageHeader'
+import { stripMarkdownComments } from '../utils/markdown'
 
 export function ApplicationDetail() {
   const { id } = useParams<{ id: string }>()
@@ -76,18 +78,22 @@ export function ApplicationDetail() {
   }
 
   const documents = docsView?.documents ?? app.documents
+  const jobUrl = job?.url ?? app.job?.url
   const title = job
     ? `${job.title} at ${job.company}`
-    : `Application #${app.id}`
+    : app.job
+      ? `${app.job.title} at ${app.job.company}`
+      : `Application #${app.id}`
 
   return (
     <PageContainer narrow>
-      <Link
-        to="/"
-        className="text-sm text-indigo-600 hover:underline dark:text-indigo-400"
-      >
-        ← Back to pipeline
-      </Link>
+      <nav className="text-sm text-slate-500">
+        <Link to="/" className="text-indigo-600 hover:underline dark:text-indigo-400">
+          Pipeline
+        </Link>
+        <span className="mx-2">→</span>
+        <span className="text-slate-700 dark:text-slate-300">Application #{app.id}</span>
+      </nav>
 
       <div className="mt-4">
         <PageHeader
@@ -122,8 +128,18 @@ export function ApplicationDetail() {
         />
       </div>
 
-      <div className="mb-4 flex items-center gap-2">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <StatusBadge status={app.status} />
+        {jobUrl && (
+          <a
+            href={jobUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600"
+          >
+            Open job posting ↗
+          </a>
+        )}
       </div>
 
       {app.status_message && (
@@ -138,14 +154,22 @@ export function ApplicationDetail() {
         </p>
       )}
 
-      {job && (
+      <div className="mb-6 flex flex-wrap gap-4 text-sm">
+        {job && (
+          <Link
+            to={`/jobs/${job.id}`}
+            className="text-indigo-600 hover:underline dark:text-indigo-400"
+          >
+            View job details →
+          </Link>
+        )}
         <Link
-          to={`/jobs/${job.id}`}
-          className="mb-6 inline-block text-sm text-indigo-600 hover:underline dark:text-indigo-400"
+          to="/profiles"
+          className="text-indigo-600 hover:underline dark:text-indigo-400"
         >
-          View job details →
+          View profile documents →
         </Link>
-      )}
+      </div>
 
       <section className="space-y-6">
         <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
@@ -154,65 +178,71 @@ export function ApplicationDetail() {
         {documents.length === 0 ? (
           <p className="text-sm text-slate-500">No documents generated yet.</p>
         ) : (
-          documents.map((doc) => (
-            <Card key={doc.id} padding={false}>
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-6 py-4 dark:border-slate-700">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium capitalize text-slate-900 dark:text-slate-100">
-                    {doc.doc_type.replace(/_/g, ' ')}
-                  </span>
-                  <span className="text-xs text-slate-500">v{doc.version}</span>
-                  {doc.approved && (
-                    <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-                      Approved
+          documents.map((doc) => {
+            const criticReport = parseCriticReport(doc.critic_report)
+            const displayMarkdown = stripMarkdownComments(doc.markdown_content)
+
+            return (
+              <Card key={doc.id} padding={false}>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-6 py-4 dark:border-slate-700">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium capitalize text-slate-900 dark:text-slate-100">
+                      {doc.doc_type.replace(/_/g, ' ')}
                     </span>
-                  )}
+                    <span className="text-xs text-slate-500">v{doc.version}</span>
+                    {doc.approved && (
+                      <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                        Approved
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    {(doc.pdf_path || doc.id) && (
+                      <a
+                        href={api.documentDownloadUrl(appId, doc.id)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <Button variant="secondary" size="sm">
+                          Download PDF
+                        </Button>
+                      </a>
+                    )}
+                    {!doc.approved && (
+                      <Button
+                        variant="success"
+                        size="sm"
+                        onClick={() => approveDoc.mutate({ docId: doc.id, approved: true })}
+                        disabled={approveDoc.isPending}
+                      >
+                        Approve
+                      </Button>
+                    )}
+                    {doc.approved && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => approveDoc.mutate({ docId: doc.id, approved: false })}
+                      >
+                        Revoke
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  {!doc.approved && (
-                    <Button
-                      variant="success"
-                      size="sm"
-                      onClick={() => approveDoc.mutate({ docId: doc.id, approved: true })}
-                      disabled={approveDoc.isPending}
-                    >
-                      Approve
-                    </Button>
-                  )}
-                  {doc.approved && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => approveDoc.mutate({ docId: doc.id, approved: false })}
-                    >
-                      Revoke
-                    </Button>
-                  )}
-                </div>
-              </div>
 
-              {doc.ats_score != null && (
-                <div className="border-b border-slate-200 px-6 py-3 dark:border-slate-700">
-                  <span className="text-sm text-slate-700 dark:text-slate-300">
-                    ATS score: <strong>{(doc.ats_score * 100).toFixed(0)}%</strong>
-                  </span>
-                </div>
-              )}
+                {criticReport && (
+                  <div className="border-b border-slate-200 px-6 py-4 dark:border-slate-700">
+                    <h4 className="mb-3 text-sm font-medium text-slate-500">ATS Report</h4>
+                    <AtsReport report={criticReport} />
+                  </div>
+                )}
 
-              {doc.critic_report && (
-                <div className="border-b border-slate-200 px-6 py-4 dark:border-slate-700">
-                  <h4 className="mb-1 text-sm font-medium text-slate-500">ATS Report</h4>
-                  <pre className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">
-                    {doc.critic_report}
-                  </pre>
+                <div className="prose prose-sm max-w-none p-6 dark:prose-invert">
+                  <ReactMarkdown>{displayMarkdown}</ReactMarkdown>
                 </div>
-              )}
-
-              <div className="prose prose-sm max-w-none p-6 dark:prose-invert">
-                <ReactMarkdown>{doc.markdown_content}</ReactMarkdown>
-              </div>
-            </Card>
-          ))
+              </Card>
+            )
+          })
         )}
       </section>
     </PageContainer>
