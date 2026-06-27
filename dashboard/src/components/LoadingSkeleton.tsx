@@ -35,18 +35,19 @@ export function CardSkeleton({ count = 3 }: { count?: number }) {
 
 export function KanbanSkeleton() {
   return (
-    <div className="flex flex-nowrap gap-4 overflow-x-auto pb-4">
-      {Array.from({ length: 5 }).map((_, i) => (
+    <div className="flex flex-col gap-5 pb-4">
+      {Array.from({ length: 4 }).map((_, i) => (
         <div
           key={i}
-          className="flex min-h-[320px] min-w-[280px] max-w-[340px] flex-1 flex-shrink-0 flex-col animate-pulse rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
+          className="animate-pulse rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
         >
-          <div className="border-b border-slate-200 px-3 py-2.5 dark:border-slate-800">
-            <div className="h-5 w-24 rounded bg-slate-200 dark:bg-slate-800" />
+          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2 dark:border-slate-800">
+            <div className="h-4 w-24 rounded bg-slate-200 dark:bg-slate-800" />
+            <div className="h-5 w-6 rounded-full bg-slate-200 dark:bg-slate-800" />
           </div>
-          <div className="flex flex-1 flex-col gap-2 p-2">
-            <div className="h-28 rounded-lg bg-slate-100 dark:bg-slate-800" />
-            <div className="h-28 rounded-lg bg-slate-100 dark:bg-slate-800" />
+          <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="h-[88px] rounded-lg bg-slate-100 dark:bg-slate-800" />
+            <div className="h-[88px] rounded-lg bg-slate-100 dark:bg-slate-800" />
           </div>
         </div>
       ))}
