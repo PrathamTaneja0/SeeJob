@@ -26,6 +26,14 @@ export interface GeneratedDocument {
   created_at: string
 }
 
+export interface ApplicationJobSummary {
+  id: number
+  title: string
+  company: string
+  url: string
+  fit_score: number | null
+}
+
 export interface Application {
   id: number
   person_id: number
@@ -38,6 +46,7 @@ export interface Application {
   created_at: string
   updated_at: string
   documents: GeneratedDocument[]
+  job: ApplicationJobSummary | null
 }
 
 export interface ApplicationPipelineView {

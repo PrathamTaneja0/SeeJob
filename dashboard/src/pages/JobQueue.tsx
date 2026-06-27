@@ -91,11 +91,20 @@ export function JobQueue() {
                         </Link>
                         <p className="text-sm text-slate-500">
                           {job.company}
+                          {job.location && (
+                            <span className="ml-1 text-slate-400">· {job.location}</span>
+                          )}
                           {job.fit_score != null && (
                             <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
                               {(job.fit_score * 100).toFixed(0)}% fit
                             </span>
                           )}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          {new Date(job.updated_at).toLocaleDateString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                          })}
                         </p>
                       </div>
                       {key === 'to_review' && (

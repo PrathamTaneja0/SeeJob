@@ -144,6 +144,10 @@ seejob   # serves dashboard/dist at / when present
 
 Then open http://127.0.0.1:8000/
 
+### Public dashboard + local API (Cloudflare Option A)
+
+To host the **dashboard on Cloudflare Pages** while keeping the **API and Playwright on your Windows PC**, use a Cloudflare Tunnel so the browser can reach `http://127.0.0.1:8000` via `https://api.yourdomain.com`. Full step-by-step: **[docs/DEPLOY_CLOUDFLARE.md — Option A](docs/DEPLOY_CLOUDFLARE.md#option-a--dashboard-on-pages-api-on-your-windows-pc-recommended-for-home-users)**.
+
 ### Dashboard scripts
 
 | Command | Purpose |

@@ -23,6 +23,18 @@ class GeneratedDocumentRead(BaseModel):
     created_at: datetime
 
 
+class ApplicationJobSummary(BaseModel):
+    """Lightweight job fields for pipeline kanban cards."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    company: str
+    url: str
+    fit_score: float | None
+
+
 class ApplicationRead(BaseModel):
     """Application pipeline item."""
 
@@ -39,6 +51,7 @@ class ApplicationRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     documents: list[GeneratedDocumentRead] = []
+    job: ApplicationJobSummary | None = None
 
 
 class ApplicationPipelineView(BaseModel):

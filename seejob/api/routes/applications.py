@@ -69,7 +69,10 @@ def pipeline_view(db: Session = Depends(get_session)) -> list[ApplicationPipelin
             db.scalars(
                 select(Application)
                 .where(Application.status == app_status)
-                .options(selectinload(Application.documents))
+                .options(
+                    selectinload(Application.documents),
+                    selectinload(Application.job),
+                )
                 .order_by(Application.updated_at.desc())
                 .limit(20)
             ).all()
