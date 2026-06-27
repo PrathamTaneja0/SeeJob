@@ -48,6 +48,7 @@ output/pdfs/
 browser_profiles/
 seejob/data/browser_profiles/
 seejob/data/artifacts/
+seejob/data/profile_documents/
 playwright/.cache/
 .playwright/
 

@@ -1,9 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { api } from '../api/client'
 import type { Person, WorkAuthorization } from '../api/types'
 import { ErrorState } from '../components/ErrorState'
 import { CardSkeleton } from '../components/LoadingSkeleton'
+import { Button } from '../components/ui/Button'
+import { Card } from '../components/ui/Card'
+import { FormField, INPUT_CLASS, TextAreaField } from '../components/ui/FormField'
+import { PageContainer } from '../components/ui/PageContainer'
+import { PageHeader } from '../components/ui/PageHeader'
 
 const WORK_AUTH_OPTIONS: WorkAuthorization[] = [
   'citizen',
@@ -21,20 +26,53 @@ const emptyForm: Partial<Person> = {
   location: '',
   headline: '',
   summary: '',
+  linkedin_url: '',
+  github_url: '',
+  portfolio_url: '',
   work_authorization: 'other',
   willing_to_relocate: false,
   salary_currency: 'USD',
 }
 
+function formatIngestMessage(result: {
+  experiences_added: number
+  education_added: number
+  skills_added: number
+  fields_updated: string[]
+  chunks_stored: number
+}) {
+  const parts = [
+    `+${result.experiences_added} experience`,
+    `+${result.education_added} education`,
+    `+${result.skills_added} skills`,
+    `${result.chunks_stored} chunks indexed`,
+  ]
+  let msg = `CV ingested: ${parts.join(', ')}`
+  if (result.fields_updated.length > 0) {
+    msg += `. Updated fields: ${result.fields_updated.join(', ')}`
+  }
+  return msg
+}
+
 export function ProfileEditor() {
   const queryClient = useQueryClient()
+  const cvInputRef = useRef<HTMLInputElement>(null)
+  const docInputRef = useRef<HTMLInputElement>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [form, setForm] = useState<Partial<Person>>(emptyForm)
-  const [uploadMsg, setUploadMsg] = useState<string | null>(null)
+  const [uploadMsg, setUploadMsg] = useState<{ text: string; ok: boolean } | null>(null)
+  const [docLabel, setDocLabel] = useState('')
+  const [cvDragOver, setCvDragOver] = useState(false)
 
   const { data: profiles, isLoading, error, refetch } = useQuery({
     queryKey: ['profiles'],
     queryFn: api.listProfiles,
+  })
+
+  const { data: documents } = useQuery({
+    queryKey: ['profileDocuments', selectedId],
+    queryFn: () => api.listProfileDocuments(selectedId!),
+    enabled: selectedId != null,
   })
 
   const createMutation = useMutation({
@@ -64,13 +102,43 @@ export function ProfileEditor() {
   const ingestMutation = useMutation({
     mutationFn: ({ id, file }: { id: number; file: File }) => api.ingestCv(id, file),
     onSuccess: (result) => {
-      setUploadMsg(
-        `Ingested: +${result.experiences_added} exp, +${result.education_added} edu, +${result.skills_added} skills`,
-      )
+      setUploadMsg({ text: formatIngestMessage(result), ok: true })
       queryClient.invalidateQueries({ queryKey: ['profiles'] })
+      if (selectedId) {
+        api.getProfile(selectedId).then(setForm)
+      }
     },
     onError: (err) =>
-      setUploadMsg(err instanceof Error ? err.message : 'Upload failed'),
+      setUploadMsg({
+        text: err instanceof Error ? err.message : 'CV upload failed',
+        ok: false,
+      }),
+  })
+
+  const uploadDocMutation = useMutation({
+    mutationFn: ({ id, file, label }: { id: number; file: File; label?: string }) =>
+      api.uploadProfileDocument(id, file, label),
+    onSuccess: (result) => {
+      setUploadMsg({
+        text: `Document "${result.document.label ?? result.document.filename}" uploaded — ${result.chunks_stored} chunks indexed`,
+        ok: true,
+      })
+      setDocLabel('')
+      queryClient.invalidateQueries({ queryKey: ['profileDocuments', selectedId] })
+    },
+    onError: (err) =>
+      setUploadMsg({
+        text: err instanceof Error ? err.message : 'Document upload failed',
+        ok: false,
+      }),
+  })
+
+  const deleteDocMutation = useMutation({
+    mutationFn: ({ personId, docId }: { personId: number; docId: number }) =>
+      api.deleteProfileDocument(personId, docId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profileDocuments', selectedId] })
+    },
   })
 
   const selectProfile = async (id: number) => {
@@ -89,6 +157,16 @@ export function ProfileEditor() {
     }
   }
 
+  const handleCvFile = (file: File | undefined) => {
+    if (file && selectedId) ingestMutation.mutate({ id: selectedId, file })
+  }
+
+  const handleDocFile = (file: File | undefined) => {
+    if (file && selectedId) {
+      uploadDocMutation.mutate({ id: selectedId, file, label: docLabel || undefined })
+    }
+  }
+
   if (isLoading) return <CardSkeleton count={2} />
   if (error) {
     return (
@@ -100,193 +178,301 @@ export function ProfileEditor() {
   }
 
   return (
-    <div>
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold">Profile Editor</h2>
-        <p className="text-sm text-slate-500">
-          Manage your candidate profile and upload a master CV for ingestion.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Profiles"
+        subtitle="Manage your candidate profile, upload a master CV, and add supporting documents."
+        action={
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setSelectedId(null)
+              setForm(emptyForm)
+              setUploadMsg(null)
+            }}
+          >
+            + New profile
+          </Button>
+        }
+      />
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <aside className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-            <h3 className="font-semibold">Profiles</h3>
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedId(null)
-                setForm(emptyForm)
-              }}
-              className="text-xs text-indigo-600 hover:underline dark:text-indigo-400"
-            >
-              + New
-            </button>
+        <Card padding={false}>
+          <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-700">
+            <h3 className="font-semibold text-slate-900 dark:text-slate-100">Profiles</h3>
           </div>
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {profiles?.length === 0 && (
-              <li className="px-4 py-6 text-center text-sm text-slate-400">No profiles yet</li>
+              <li className="px-6 py-6 text-center text-sm text-slate-400">No profiles yet</li>
             )}
             {profiles?.map((p) => (
               <li key={p.id}>
                 <button
                   type="button"
                   onClick={() => selectProfile(p.id)}
-                  className={`w-full px-4 py-3 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800 ${
+                  className={`w-full px-6 py-3 text-left text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${
                     selectedId === p.id ? 'bg-indigo-50 dark:bg-indigo-950/30' : ''
                   }`}
                 >
-                  <span className="font-medium">{p.full_name}</span>
+                  <span className="font-medium text-slate-900 dark:text-slate-100">
+                    {p.full_name}
+                  </span>
                   <span className="block text-xs text-slate-500">{p.email}</span>
                 </button>
               </li>
             ))}
           </ul>
-        </aside>
+        </Card>
 
-        <form
-          onSubmit={handleSubmit}
-          className="lg:col-span-2 space-y-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
-        >
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field
-              label="Full name"
-              value={form.full_name ?? ''}
-              onChange={(v) => setForm((f) => ({ ...f, full_name: v }))}
-              required
-            />
-            <Field
-              label="Email"
-              type="email"
-              value={form.email ?? ''}
-              onChange={(v) => setForm((f) => ({ ...f, email: v }))}
-              required
-            />
-            <Field
-              label="Phone"
-              value={form.phone ?? ''}
-              onChange={(v) => setForm((f) => ({ ...f, phone: v }))}
-            />
-            <Field
-              label="Location"
-              value={form.location ?? ''}
-              onChange={(v) => setForm((f) => ({ ...f, location: v }))}
-            />
-            <Field
-              label="Headline"
-              value={form.headline ?? ''}
-              onChange={(v) => setForm((f) => ({ ...f, headline: v }))}
-              className="sm:col-span-2"
-            />
-          </div>
+        <div className="space-y-6 lg:col-span-2">
+          <Card>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField
+                  label="Full name"
+                  value={form.full_name ?? ''}
+                  onChange={(v) => setForm((f) => ({ ...f, full_name: v }))}
+                  required
+                />
+                <FormField
+                  label="Email"
+                  type="email"
+                  value={form.email ?? ''}
+                  onChange={(v) => setForm((f) => ({ ...f, email: v }))}
+                  required
+                />
+                <FormField
+                  label="Phone"
+                  value={form.phone ?? ''}
+                  onChange={(v) => setForm((f) => ({ ...f, phone: v }))}
+                />
+                <FormField
+                  label="Location"
+                  value={form.location ?? ''}
+                  onChange={(v) => setForm((f) => ({ ...f, location: v }))}
+                />
+                <FormField
+                  label="Headline"
+                  value={form.headline ?? ''}
+                  onChange={(v) => setForm((f) => ({ ...f, headline: v }))}
+                  className="sm:col-span-2"
+                />
+              </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium">Summary</label>
-            <textarea
-              value={form.summary ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, summary: e.target.value }))}
-              rows={4}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800"
-            />
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-sm font-medium">Work authorization</label>
-              <select
-                value={form.work_authorization ?? 'other'}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    work_authorization: e.target.value as WorkAuthorization,
-                  }))
-                }
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800"
-              >
-                {WORK_AUTH_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt.replace(/_/g, ' ')}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <label className="flex items-center gap-2 pt-6 text-sm">
-              <input
-                type="checkbox"
-                checked={form.willing_to_relocate ?? false}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, willing_to_relocate: e.target.checked }))
-                }
+              <TextAreaField
+                label="Summary"
+                value={form.summary ?? ''}
+                onChange={(v) => setForm((f) => ({ ...f, summary: v }))}
               />
-              Willing to relocate
-            </label>
-          </div>
 
-          <div className="flex flex-wrap gap-3 pt-2">
-            <button
-              type="submit"
-              disabled={createMutation.isPending || updateMutation.isPending}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-            >
-              {selectedId ? 'Save changes' : 'Create profile'}
-            </button>
-            {selectedId && (
-              <button
-                type="button"
-                onClick={() => deleteMutation.mutate(selectedId)}
-                className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-950/30"
-              >
-                Delete
-              </button>
-            )}
-          </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField
+                  label="LinkedIn URL"
+                  type="url"
+                  value={form.linkedin_url ?? ''}
+                  onChange={(v) => setForm((f) => ({ ...f, linkedin_url: v }))}
+                  placeholder="https://linkedin.com/in/..."
+                />
+                <FormField
+                  label="GitHub URL"
+                  type="url"
+                  value={form.github_url ?? ''}
+                  onChange={(v) => setForm((f) => ({ ...f, github_url: v }))}
+                  placeholder="https://github.com/..."
+                />
+                <FormField
+                  label="Portfolio URL"
+                  type="url"
+                  value={form.portfolio_url ?? ''}
+                  onChange={(v) => setForm((f) => ({ ...f, portfolio_url: v }))}
+                  placeholder="https://..."
+                  className="sm:col-span-2"
+                />
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Work authorization
+                  </label>
+                  <select
+                    value={form.work_authorization ?? 'other'}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        work_authorization: e.target.value as WorkAuthorization,
+                      }))
+                    }
+                    className={INPUT_CLASS}
+                  >
+                    {WORK_AUTH_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt.replace(/_/g, ' ')}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <label className="flex items-center gap-2 pt-6 text-sm text-slate-700 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={form.willing_to_relocate ?? false}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, willing_to_relocate: e.target.checked }))
+                    }
+                  />
+                  Willing to relocate
+                </label>
+              </div>
+
+              <div className="flex flex-wrap gap-3 pt-2">
+                <Button
+                  type="submit"
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                >
+                  {selectedId ? 'Save changes' : 'Create profile'}
+                </Button>
+                {selectedId && (
+                  <Button
+                    variant="danger"
+                    onClick={() => deleteMutation.mutate(selectedId)}
+                    disabled={deleteMutation.isPending}
+                  >
+                    Delete
+                  </Button>
+                )}
+              </div>
+            </form>
+          </Card>
 
           {selectedId && (
-            <div className="border-t border-slate-200 pt-4 dark:border-slate-800">
-              <h4 className="mb-2 text-sm font-medium">Upload CV (PDF, DOCX, TXT)</h4>
-              <input
-                type="file"
-                accept=".pdf,.docx,.txt"
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) ingestMutation.mutate({ id: selectedId, file })
-                }}
-                className="text-sm"
-              />
-              {uploadMsg && <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{uploadMsg}</p>}
+            <>
+              <Card>
+                <h4 className="mb-4 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  Upload CV (PDF, DOCX, TXT)
+                </h4>
+                <input
+                  ref={cvInputRef}
+                  type="file"
+                  accept=".pdf,.docx,.txt"
+                  className="hidden"
+                  onChange={(e) => {
+                    handleCvFile(e.target.files?.[0])
+                    e.target.value = ''
+                  }}
+                />
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    setCvDragOver(true)
+                  }}
+                  onDragLeave={() => setCvDragOver(false)}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    setCvDragOver(false)
+                    handleCvFile(e.dataTransfer.files[0])
+                  }}
+                  className={`rounded-lg border-2 border-dashed p-6 text-center transition-colors ${
+                    cvDragOver
+                      ? 'border-indigo-400 bg-indigo-50 dark:border-indigo-500 dark:bg-indigo-950/30'
+                      : 'border-slate-300 dark:border-slate-600'
+                  }`}
+                >
+                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                    Drag and drop your master CV here, or
+                  </p>
+                  <Button
+                    className="mt-3"
+                    onClick={() => cvInputRef.current?.click()}
+                    disabled={ingestMutation.isPending}
+                  >
+                    {ingestMutation.isPending ? 'Uploading…' : 'Upload CV'}
+                  </Button>
+                </div>
+              </Card>
+
+              <Card>
+                <h4 className="mb-4 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  Supporting documents
+                </h4>
+                <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
+                  Upload portfolio writeups, certifications, cover letter templates, or project
+                  docs (PDF, DOCX, TXT). Content is indexed for RAG during document generation.
+                </p>
+                <div className="mb-4 grid gap-4 sm:grid-cols-2">
+                  <FormField
+                    label="Label (optional)"
+                    value={docLabel}
+                    onChange={setDocLabel}
+                    placeholder="e.g. AWS certification"
+                  />
+                  <div className="flex items-end">
+                    <input
+                      ref={docInputRef}
+                      type="file"
+                      accept=".pdf,.docx,.txt"
+                      className="hidden"
+                      onChange={(e) => {
+                        handleDocFile(e.target.files?.[0])
+                        e.target.value = ''
+                      }}
+                    />
+                    <Button
+                      variant="secondary"
+                      className="w-full sm:w-auto"
+                      onClick={() => docInputRef.current?.click()}
+                      disabled={uploadDocMutation.isPending}
+                    >
+                      {uploadDocMutation.isPending ? 'Uploading…' : 'Upload document'}
+                    </Button>
+                  </div>
+                </div>
+
+                {documents && documents.length > 0 ? (
+                  <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-700">
+                    {documents.map((doc) => (
+                      <li
+                        key={doc.id}
+                        className="flex items-center justify-between gap-3 px-4 py-3"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {doc.label ?? doc.filename}
+                          </p>
+                          <p className="truncate text-xs text-slate-500">{doc.filename}</p>
+                        </div>
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          onClick={() =>
+                            deleteDocMutation.mutate({ personId: selectedId, docId: doc.id })
+                          }
+                          disabled={deleteDocMutation.isPending}
+                        >
+                          Delete
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-slate-400">No supporting documents yet.</p>
+                )}
+              </Card>
+            </>
+          )}
+
+          {uploadMsg && (
+            <div
+              className={`rounded-lg border p-4 text-sm ${
+                uploadMsg.ok
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300'
+                  : 'border-red-200 bg-red-50 text-red-800 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300'
+              }`}
+            >
+              {uploadMsg.text}
             </div>
           )}
-        </form>
+        </div>
       </div>
-    </div>
-  )
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  type = 'text',
-  required,
-  className = '',
-}: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  type?: string
-  required?: boolean
-  className?: string
-}) {
-  return (
-    <div className={className}>
-      <label className="mb-1 block text-sm font-medium">{label}</label>
-      <input
-        type={type}
-        value={value}
-        required={required}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800"
-      />
-    </div>
+    </PageContainer>
   )
 }

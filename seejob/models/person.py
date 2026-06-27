@@ -11,6 +11,7 @@ from seejob.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
     from seejob.models.application import Application
+    from seejob.models.profile_document import ProfileDocument
     from seejob.models.screening import ScreeningAnswer
     from seejob.models.site_account import SiteAccount
 
@@ -77,6 +78,11 @@ class Person(Base, TimestampMixin):
         cascade="all, delete-orphan",
     )
     applications: Mapped[list["Application"]] = relationship(back_populates="person")
+    profile_documents: Mapped[list["ProfileDocument"]] = relationship(
+        back_populates="person",
+        cascade="all, delete-orphan",
+        order_by="ProfileDocument.uploaded_at.desc()",
+    )
 
 
 class Experience(Base, TimestampMixin):

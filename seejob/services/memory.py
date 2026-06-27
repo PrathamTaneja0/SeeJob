@@ -25,6 +25,7 @@ class ChunkType(str, Enum):
     LINKEDIN = "linkedin"
     GITHUB = "github"
     MANUAL = "manual"
+    SUPPORTING_DOC = "supporting_doc"
 
 
 @dataclass

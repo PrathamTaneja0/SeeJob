@@ -256,7 +256,12 @@ async def generate_application_documents(
         person_id,
         jd_text[:4000],
         top_k=5,
-        chunk_types=[ChunkType.CV, ChunkType.PROJECT, ChunkType.BEHAVIORAL],
+        chunk_types=[
+            ChunkType.CV,
+            ChunkType.PROJECT,
+            ChunkType.BEHAVIORAL,
+            ChunkType.SUPPORTING_DOC,
+        ],
     )
     memory_texts = [c.text for c in chunks]
 

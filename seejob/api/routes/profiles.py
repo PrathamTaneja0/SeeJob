@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from seejob.core.dependencies import get_session
@@ -25,8 +25,10 @@ from seejob.schemas.profile import (
     SkillCreate,
     SkillRead,
 )
+from seejob.schemas.profile_document import ProfileDocumentRead, ProfileDocumentUploadResult
 from seejob.services import ingestion as ingestion_service
 from seejob.services import profile as profile_service
+from seejob.services import profile_documents as profile_documents_service
 from seejob.services import qa as qa_service
 
 router = APIRouter()
@@ -206,6 +208,69 @@ async def ingest_profile_cv(
         ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/{person_id}/documents", response_model=list[ProfileDocumentRead])
+def list_profile_documents(
+    person_id: int,
+    db: Session = Depends(get_session),
+) -> list[ProfileDocumentRead]:
+    """List supporting documents for a profile."""
+    try:
+        return profile_documents_service.list_documents(db, person_id)
+    except profile_service.ProfileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{person_id}/documents",
+    response_model=ProfileDocumentUploadResult,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_profile_document(
+    person_id: int,
+    file: UploadFile = File(...),
+    label: str | None = Form(default=None),
+    db: Session = Depends(get_session),
+) -> ProfileDocumentUploadResult:
+    """Upload a supporting document (PDF, DOCX, TXT) and index for RAG."""
+    try:
+        content = await file.read(MAX_UPLOAD_BYTES + 1)
+        _validate_upload_file(file, content)
+        doc, chunks_stored, raw_len = profile_documents_service.upload_document(
+            db,
+            person_id,
+            content,
+            file.filename or "document.pdf",
+            label=label,
+        )
+        return ProfileDocumentUploadResult(
+            document=ProfileDocumentRead.model_validate(doc, from_attributes=True),
+            chunks_stored=chunks_stored,
+            raw_text_length=raw_len,
+        )
+    except profile_service.ProfileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except UnsupportedMediaTypeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.delete("/{person_id}/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_profile_document(
+    person_id: int,
+    document_id: int,
+    db: Session = Depends(get_session),
+) -> None:
+    """Delete a supporting document and its vector chunks."""
+    try:
+        profile_documents_service.delete_document(db, person_id, document_id)
+    except profile_service.ProfileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.post("/{person_id}/import-links", response_model=LinkImportRead)

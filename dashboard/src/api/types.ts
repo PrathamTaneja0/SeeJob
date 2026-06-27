@@ -217,6 +217,21 @@ export interface ApplicationDocumentsView {
   documents: GeneratedDocument[]
 }
 
+export interface ProfileDocument {
+  id: number
+  person_id: number
+  label: string | null
+  filename: string
+  path: string
+  uploaded_at: string
+}
+
+export interface ProfileDocumentUploadResult {
+  document: ProfileDocument
+  chunks_stored: number
+  raw_text_length: number
+}
+
 export interface IngestionResult {
   person_id: number
   raw_text_length: number

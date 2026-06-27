@@ -3,6 +3,9 @@ import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import { ErrorState } from '../components/ErrorState'
 import { CardSkeleton } from '../components/LoadingSkeleton'
+import { Button } from '../components/ui/Button'
+import { PageContainer } from '../components/ui/PageContainer'
+import { PageHeader } from '../components/ui/PageHeader'
 
 export function JobQueue() {
   const queryClient = useQueryClient()
@@ -52,35 +55,34 @@ export function JobQueue() {
   ]
 
   return (
-    <div>
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold">Job Queue</h2>
-        <p className="text-sm text-slate-500">
-          Review discovered jobs and approve targeting for your profile.
+    <PageContainer>
+      <PageHeader
+        title="Job Queue"
+        subtitle="Review discovered jobs and approve targeting for your profile."
+      />
+
+      {!defaultPersonId && (
+        <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
+          Create a profile first to approve jobs.
         </p>
-        {!defaultPersonId && (
-          <p className="mt-2 text-sm text-amber-600 dark:text-amber-400">
-            Create a profile first to approve jobs.
-          </p>
-        )}
-      </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         {buckets.map(({ key, label, data }) => (
           <section
             key={key}
-            className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
+            className="rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
           >
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-              <h3 className="font-semibold">{label}</h3>
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-700">
+              <h3 className="font-semibold text-slate-900 dark:text-slate-100">{label}</h3>
               <span className="text-sm text-slate-500">{data.count}</span>
             </div>
             <ul className="divide-y divide-slate-100 dark:divide-slate-800">
               {data.jobs.length === 0 ? (
-                <li className="px-4 py-6 text-center text-sm text-slate-400">No jobs</li>
+                <li className="px-6 py-6 text-center text-sm text-slate-400">No jobs</li>
               ) : (
                 data.jobs.map((job) => (
-                  <li key={job.id} className="px-4 py-3">
+                  <li key={job.id} className="px-6 py-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <Link
@@ -109,8 +111,9 @@ export function JobQueue() {
                       </div>
                       {key === 'to_review' && (
                         <div className="flex flex-shrink-0 gap-2">
-                          <button
-                            type="button"
+                          <Button
+                            variant="success"
+                            size="sm"
                             disabled={!defaultPersonId || approveMutation.isPending}
                             onClick={() =>
                               defaultPersonId &&
@@ -119,18 +122,17 @@ export function JobQueue() {
                                 personId: defaultPersonId,
                               })
                             }
-                            className="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                           >
                             Approve
-                          </button>
-                          <button
-                            type="button"
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
                             disabled={skipMutation.isPending}
                             onClick={() => skipMutation.mutate(job.id)}
-                            className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
                           >
                             Skip
-                          </button>
+                          </Button>
                         </div>
                       )}
                     </div>
@@ -141,6 +143,6 @@ export function JobQueue() {
           </section>
         ))}
       </div>
-    </div>
+    </PageContainer>
   )
 }

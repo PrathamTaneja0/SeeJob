@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet } from 'react-router-dom'
 
 const NAV = [
   { to: '/', label: 'Pipeline', end: true },
@@ -21,13 +21,18 @@ export function Layout() {
   }, [dark])
 
   return (
-    <div className="flex min-h-screen">
-      <aside className="flex w-56 flex-shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <div className="border-b border-slate-200 px-4 py-5 dark:border-slate-800">
-          <h1 className="text-lg font-bold tracking-tight text-indigo-600 dark:text-indigo-400">
-            SeeJob
-          </h1>
-          <p className="text-xs text-slate-500">Control Dashboard</p>
+    <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950">
+      <aside className="flex w-56 flex-shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+        <div className="border-b border-slate-200 px-4 py-5 dark:border-slate-700">
+          <Link
+            to="/"
+            className="block transition-opacity hover:opacity-80"
+          >
+            <h1 className="text-lg font-bold tracking-tight text-indigo-600 dark:text-indigo-400">
+              SeeJob
+            </h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Control Dashboard</p>
+          </Link>
         </div>
         <nav className="flex-1 space-y-1 p-3">
           {NAV.map((item) => (
@@ -47,7 +52,7 @@ export function Layout() {
             </NavLink>
           ))}
         </nav>
-        <div className="border-t border-slate-200 p-3 dark:border-slate-800">
+        <div className="border-t border-slate-200 p-3 dark:border-slate-700">
           <button
             type="button"
             onClick={() => setDark((d) => !d)}

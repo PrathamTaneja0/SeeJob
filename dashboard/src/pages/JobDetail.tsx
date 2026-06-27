@@ -3,6 +3,10 @@ import { Link, useParams } from 'react-router-dom'
 import { api } from '../api/client'
 import { ErrorState } from '../components/ErrorState'
 import { LoadingSkeleton } from '../components/LoadingSkeleton'
+import { Button } from '../components/ui/Button'
+import { Card } from '../components/ui/Card'
+import { PageContainer } from '../components/ui/PageContainer'
+import { PageHeader } from '../components/ui/PageHeader'
 
 export function JobDetail() {
   const { id } = useParams<{ id: string }>()
@@ -33,32 +37,48 @@ export function JobDetail() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <Link to="/jobs" className="text-sm text-indigo-600 hover:underline dark:text-indigo-400">
+    <PageContainer narrow>
+      <Link
+        to="/jobs"
+        className="text-sm text-indigo-600 hover:underline dark:text-indigo-400"
+      >
         ← Back to queue
       </Link>
 
-      <header className="mt-4">
-        <h2 className="text-2xl font-bold">{job.title}</h2>
-        <p className="text-lg text-slate-600 dark:text-slate-400">{job.company}</p>
-        <div className="mt-2 flex flex-wrap gap-2 text-sm text-slate-500">
-          {job.location && <span>{job.location}</span>}
-          {job.is_remote && (
-            <span className="rounded bg-blue-100 px-2 py-0.5 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
-              Remote
-            </span>
-          )}
-          <span className="capitalize">{job.status.replace(/_/g, ' ')}</span>
-          <span>· {job.source}</span>
-        </div>
-      </header>
+      <div className="mt-4">
+        <PageHeader
+          title={job.title}
+          subtitle={`${job.company}${job.location ? ` · ${job.location}` : ''}`}
+          action={
+            application ? (
+              <Link to={`/applications/${application.id}`}>
+                <Button>View Application #{application.id}</Button>
+              </Link>
+            ) : (
+              <a href={job.url} target="_blank" rel="noopener noreferrer">
+                <Button variant="secondary">Open posting ↗</Button>
+              </a>
+            )
+          }
+        />
+      </div>
+
+      <div className="mb-6 flex flex-wrap gap-2 text-sm text-slate-500">
+        {job.is_remote && (
+          <span className="rounded bg-blue-100 px-2 py-0.5 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+            Remote
+          </span>
+        )}
+        <span className="capitalize">{job.status.replace(/_/g, ' ')}</span>
+        <span>· {job.source}</span>
+      </div>
 
       {(job.fit_score != null || job.match_rationale) && (
-        <section className="mt-6 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          <h3 className="font-semibold">Fit Analysis</h3>
+        <Card className="mb-6">
+          <h3 className="font-semibold text-slate-900 dark:text-slate-100">Fit Analysis</h3>
           {job.fit_score != null && (
-            <div className="mt-2">
-              <div className="flex items-center justify-between text-sm">
+            <div className="mt-3">
+              <div className="flex items-center justify-between text-sm text-slate-700 dark:text-slate-300">
                 <span>Fit score</span>
                 <span className="font-medium">{(job.fit_score * 100).toFixed(0)}%</span>
               </div>
@@ -75,30 +95,21 @@ export function JobDetail() {
               {job.match_rationale}
             </p>
           )}
-        </section>
-      )}
-
-      {application && (
-        <section className="mt-4">
-          <Link
-            to={`/applications/${application.id}`}
-            className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-          >
-            View Application #{application.id}
-          </Link>
-        </section>
+        </Card>
       )}
 
       {job.jd_text && (
-        <section className="mt-6 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          <h3 className="mb-3 font-semibold">Job Description</h3>
+        <Card className="mb-6">
+          <h3 className="mb-3 font-semibold text-slate-900 dark:text-slate-100">
+            Job Description
+          </h3>
           <pre className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">
             {job.jd_text}
           </pre>
-        </section>
+        </Card>
       )}
 
-      <p className="mt-4">
+      {!application && (
         <a
           href={job.url}
           target="_blank"
@@ -107,7 +118,7 @@ export function JobDetail() {
         >
           Open posting ↗
         </a>
-      </p>
-    </div>
+      )}
+    </PageContainer>
   )
 }

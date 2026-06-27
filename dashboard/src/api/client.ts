@@ -9,6 +9,8 @@ import type {
   JobQueueView,
   Person,
   PolicyConfig,
+  ProfileDocument,
+  ProfileDocumentUploadResult,
   RateLimits,
 } from './types'
 
@@ -146,6 +148,24 @@ export const api = {
       body: form,
     })
   },
+
+  listProfileDocuments: (personId: number) =>
+    request<ProfileDocument[]>(`/api/v1/profiles/${personId}/documents`),
+
+  uploadProfileDocument: (personId: number, file: File, label?: string) => {
+    const form = new FormData()
+    form.append('file', file)
+    if (label) form.append('label', label)
+    return request<ProfileDocumentUploadResult>(`/api/v1/profiles/${personId}/documents`, {
+      method: 'POST',
+      body: form,
+    })
+  },
+
+  deleteProfileDocument: (personId: number, documentId: number) =>
+    request<void>(`/api/v1/profiles/${personId}/documents/${documentId}`, {
+      method: 'DELETE',
+    }),
 
   getEvents: (afterId = 0, limit = 100) =>
     request<import('./types').AgentEvent[]>(

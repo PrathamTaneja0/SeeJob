@@ -6,6 +6,10 @@ import { api } from '../api/client'
 import { ErrorState } from '../components/ErrorState'
 import { LoadingSkeleton } from '../components/LoadingSkeleton'
 import { StatusBadge } from '../components/StatusBadge'
+import { Button } from '../components/ui/Button'
+import { Card } from '../components/ui/Card'
+import { PageContainer } from '../components/ui/PageContainer'
+import { PageHeader } from '../components/ui/PageHeader'
 
 export function ApplicationDetail() {
   const { id } = useParams<{ id: string }>()
@@ -72,67 +76,64 @@ export function ApplicationDetail() {
   }
 
   const documents = docsView?.documents ?? app.documents
+  const title = job
+    ? `${job.title} at ${job.company}`
+    : `Application #${app.id}`
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <Link to="/" className="text-sm text-indigo-600 hover:underline dark:text-indigo-400">
+    <PageContainer narrow>
+      <Link
+        to="/"
+        className="text-sm text-indigo-600 hover:underline dark:text-indigo-400"
+      >
         ← Back to pipeline
       </Link>
 
-      <header className="mt-4 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold">
-            Application #{app.id}
-            {job && (
-              <span className="ml-2 text-lg font-normal text-slate-500">
-                — {job.title} at {job.company}
-              </span>
-            )}
-          </h2>
-          <div className="mt-2 flex items-center gap-2">
-            <StatusBadge status={app.status} />
-            {app.platform && (
-              <span className="text-sm text-slate-500">{app.platform}</span>
-            )}
-          </div>
-          {app.status_message && (
-            <p className="mt-2 text-sm text-amber-600 dark:text-amber-400">
-              {app.status_message}
-            </p>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {app.status === 'needs_manual' && (
-            <button
-              type="button"
-              onClick={() => resumeMutation.mutate()}
-              disabled={resumeMutation.isPending}
-              className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50"
-            >
-              Resume after manual
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => applyMutation.mutate({ dryRun: true, submit: false })}
-            disabled={applyMutation.isPending}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800"
-          >
-            Dry run
-          </button>
-          <button
-            type="button"
-            onClick={() => applyMutation.mutate({ dryRun: false, submit: true })}
-            disabled={applyMutation.isPending}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-          >
-            Submit
-          </button>
-        </div>
-      </header>
+      <div className="mt-4">
+        <PageHeader
+          title={title}
+          subtitle={`Application #${app.id}${app.platform ? ` · ${app.platform}` : ''}`}
+          action={
+            <div className="flex flex-wrap gap-2">
+              {app.status === 'needs_manual' && (
+                <Button
+                  className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600"
+                  onClick={() => resumeMutation.mutate()}
+                  disabled={resumeMutation.isPending}
+                >
+                  Resume after manual
+                </Button>
+              )}
+              <Button
+                variant="secondary"
+                onClick={() => applyMutation.mutate({ dryRun: true, submit: false })}
+                disabled={applyMutation.isPending}
+              >
+                Dry run
+              </Button>
+              <Button
+                onClick={() => applyMutation.mutate({ dryRun: false, submit: true })}
+                disabled={applyMutation.isPending}
+              >
+                Submit
+              </Button>
+            </div>
+          }
+        />
+      </div>
+
+      <div className="mb-4 flex items-center gap-2">
+        <StatusBadge status={app.status} />
+      </div>
+
+      {app.status_message && (
+        <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
+          {app.status_message}
+        </p>
+      )}
 
       {applyResult && (
-        <p className="mt-4 rounded-lg bg-slate-100 p-3 text-sm dark:bg-slate-800">
+        <p className="mb-4 rounded-lg border border-slate-200 bg-slate-100 p-4 text-sm dark:border-slate-700 dark:bg-slate-800">
           {applyResult}
         </p>
       )}
@@ -140,25 +141,26 @@ export function ApplicationDetail() {
       {job && (
         <Link
           to={`/jobs/${job.id}`}
-          className="mt-4 inline-block text-sm text-indigo-600 hover:underline dark:text-indigo-400"
+          className="mb-6 inline-block text-sm text-indigo-600 hover:underline dark:text-indigo-400"
         >
           View job details →
         </Link>
       )}
 
-      <section className="mt-8 space-y-6">
-        <h3 className="text-lg font-semibold">Generated Documents</h3>
+      <section className="space-y-6">
+        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+          Generated Documents
+        </h3>
         {documents.length === 0 ? (
           <p className="text-sm text-slate-500">No documents generated yet.</p>
         ) : (
           documents.map((doc) => (
-            <article
-              key={doc.id}
-              className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+            <Card key={doc.id} padding={false}>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-6 py-4 dark:border-slate-700">
                 <div className="flex items-center gap-2">
-                  <span className="font-medium capitalize">{doc.doc_type.replace(/_/g, ' ')}</span>
+                  <span className="font-medium capitalize text-slate-900 dark:text-slate-100">
+                    {doc.doc_type.replace(/_/g, ' ')}
+                  </span>
                   <span className="text-xs text-slate-500">v{doc.version}</span>
                   {doc.approved && (
                     <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
@@ -168,37 +170,37 @@ export function ApplicationDetail() {
                 </div>
                 <div className="flex gap-2">
                   {!doc.approved && (
-                    <button
-                      type="button"
+                    <Button
+                      variant="success"
+                      size="sm"
                       onClick={() => approveDoc.mutate({ docId: doc.id, approved: true })}
                       disabled={approveDoc.isPending}
-                      className="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"
                     >
                       Approve
-                    </button>
+                    </Button>
                   )}
                   {doc.approved && (
-                    <button
-                      type="button"
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={() => approveDoc.mutate({ docId: doc.id, approved: false })}
-                      className="rounded-lg border border-slate-300 px-3 py-1 text-xs dark:border-slate-600"
                     >
                       Revoke
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
 
               {doc.ats_score != null && (
-                <div className="border-b border-slate-200 px-4 py-2 dark:border-slate-800">
-                  <span className="text-sm">
+                <div className="border-b border-slate-200 px-6 py-3 dark:border-slate-700">
+                  <span className="text-sm text-slate-700 dark:text-slate-300">
                     ATS score: <strong>{(doc.ats_score * 100).toFixed(0)}%</strong>
                   </span>
                 </div>
               )}
 
               {doc.critic_report && (
-                <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+                <div className="border-b border-slate-200 px-6 py-4 dark:border-slate-700">
                   <h4 className="mb-1 text-sm font-medium text-slate-500">ATS Report</h4>
                   <pre className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">
                     {doc.critic_report}
@@ -206,13 +208,13 @@ export function ApplicationDetail() {
                 </div>
               )}
 
-              <div className="prose prose-sm max-w-none p-4 dark:prose-invert">
+              <div className="prose prose-sm max-w-none p-6 dark:prose-invert">
                 <ReactMarkdown>{doc.markdown_content}</ReactMarkdown>
               </div>
-            </article>
+            </Card>
           ))
         )}
       </section>
-    </div>
+    </PageContainer>
   )
 }

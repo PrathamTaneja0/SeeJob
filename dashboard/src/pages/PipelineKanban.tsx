@@ -3,6 +3,8 @@ import { api } from '../api/client'
 import type { ApplicationStatus } from '../api/types'
 import { ErrorState } from '../components/ErrorState'
 import { KanbanSkeleton } from '../components/LoadingSkeleton'
+import { PageContainer } from '../components/ui/PageContainer'
+import { PageHeader } from '../components/ui/PageHeader'
 import { PipelineCard } from '../components/PipelineCard'
 
 const PIPELINE_SECTIONS: { status: ApplicationStatus; label: string }[] = [
@@ -35,13 +37,11 @@ export function PipelineKanban() {
   const byStatus = new Map(data?.map((col) => [col.status, col]) ?? [])
 
   return (
-    <div>
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold">Application Pipeline</h2>
-        <p className="text-sm text-slate-500">
-          Track applications through approval, document generation, and submission.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Application Pipeline"
+        subtitle="Track applications through approval, document generation, and submission."
+      />
 
       <div className="flex flex-col gap-5 pb-4">
         {PIPELINE_SECTIONS.map(({ status, label }) => {
@@ -52,15 +52,17 @@ export function PipelineKanban() {
           return (
             <section
               key={status}
-              className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
+              className="rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
             >
-              <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2 dark:border-slate-800">
-                <h3 className="text-sm font-semibold">{label}</h3>
+              <div className="flex items-center justify-between border-b border-slate-200 px-6 py-3 dark:border-slate-700">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  {label}
+                </h3>
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
                   {count}
                 </span>
               </div>
-              <div className="p-3">
+              <div className="p-4">
                 {apps.length === 0 ? (
                   <p className="py-1 text-center text-xs text-slate-400">No applications</p>
                 ) : (
@@ -75,6 +77,6 @@ export function PipelineKanban() {
           )
         })}
       </div>
-    </div>
+    </PageContainer>
   )
 }

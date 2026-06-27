@@ -4,6 +4,11 @@ import { api } from '../api/client'
 import type { PolicyConfig, RateLimits } from '../api/types'
 import { ErrorState } from '../components/ErrorState'
 import { LoadingSkeleton } from '../components/LoadingSkeleton'
+import { Button } from '../components/ui/Button'
+import { Card } from '../components/ui/Card'
+import { INPUT_CLASS } from '../components/ui/FormField'
+import { PageContainer } from '../components/ui/PageContainer'
+import { PageHeader } from '../components/ui/PageHeader'
 
 export function Settings() {
   const queryClient = useQueryClient()
@@ -48,13 +53,31 @@ export function Settings() {
   const limits = (form.rate_limits ?? policy.rate_limits) as RateLimits
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold">Settings</h2>
-        <p className="text-sm text-slate-500">
-          Configure automation policy, rate limits, and approval gates.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Settings"
+        subtitle="Configure automation policy, rate limits, and approval gates."
+        action={
+          <Button
+            onClick={() =>
+              updateMutation.mutate({
+                auto_apply: form.auto_apply,
+                require_doc_approval: form.require_doc_approval,
+                require_submit_approval: form.require_submit_approval,
+                min_fit_score: form.min_fit_score,
+                ats_min_score: form.ats_min_score,
+                daily_apply_limit: form.daily_apply_limit,
+                rate_limits: limits,
+                sourcing_enabled: form.sourcing_enabled,
+                sourcing_interval_minutes: form.sourcing_interval_minutes,
+              })
+            }
+            disabled={updateMutation.isPending}
+          >
+            Save settings
+          </Button>
+        }
+      />
 
       <form
         onSubmit={(e) => {
@@ -71,10 +94,10 @@ export function Settings() {
             sourcing_interval_minutes: form.sourcing_interval_minutes,
           })
         }}
-        className="space-y-6 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900"
+        className="space-y-6"
       >
-        <section>
-          <h3 className="mb-3 font-semibold">Automation</h3>
+        <Card>
+          <h3 className="mb-4 font-semibold text-slate-900 dark:text-slate-100">Automation</h3>
           <div className="space-y-3">
             <Toggle
               label="Auto-apply (skip manual job approval when score passes)"
@@ -97,10 +120,10 @@ export function Settings() {
               onChange={(v) => setForm((f) => ({ ...f, sourcing_enabled: v }))}
             />
           </div>
-        </section>
+        </Card>
 
-        <section>
-          <h3 className="mb-3 font-semibold">Thresholds</h3>
+        <Card>
+          <h3 className="mb-4 font-semibold text-slate-900 dark:text-slate-100">Thresholds</h3>
           <div className="grid gap-4 sm:grid-cols-2">
             <NumberField
               label="Min fit score (0–1)"
@@ -131,10 +154,12 @@ export function Settings() {
               onChange={(v) => setForm((f) => ({ ...f, sourcing_interval_minutes: v }))}
             />
           </div>
-        </section>
+        </Card>
 
-        <section>
-          <h3 className="mb-3 font-semibold">Per-platform rate limits</h3>
+        <Card>
+          <h3 className="mb-4 font-semibold text-slate-900 dark:text-slate-100">
+            Per-platform rate limits
+          </h3>
           <div className="grid gap-3 sm:grid-cols-2">
             {(['default', 'linkedin', 'greenhouse', 'lever', 'workday', 'icims'] as const).map(
               (platform) => (
@@ -148,19 +173,17 @@ export function Settings() {
               ),
             )}
           </div>
-        </section>
+        </Card>
 
         <div className="flex items-center gap-3">
-          <button
-            type="submit"
-            disabled={updateMutation.isPending}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-          >
+          <Button type="submit" disabled={updateMutation.isPending}>
             Save settings
-          </button>
-          {saved && <span className="text-sm text-emerald-600">Saved!</span>}
+          </Button>
+          {saved && (
+            <span className="text-sm text-emerald-600 dark:text-emerald-400">Saved!</span>
+          )}
           {updateMutation.isError && (
-            <span className="text-sm text-red-600">
+            <span className="text-sm text-red-600 dark:text-red-400">
               {updateMutation.error instanceof Error
                 ? updateMutation.error.message
                 : 'Save failed'}
@@ -168,7 +191,7 @@ export function Settings() {
           )}
         </div>
       </form>
-    </div>
+    </PageContainer>
   )
 }
 
@@ -182,7 +205,7 @@ function Toggle({
   onChange: (v: boolean) => void
 }) {
   return (
-    <label className="flex cursor-pointer items-center gap-3 text-sm">
+    <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-700 dark:text-slate-300">
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
       {label}
     </label>
@@ -206,7 +229,9 @@ function NumberField({
 }) {
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium capitalize">{label}</label>
+      <label className="mb-1 block text-sm font-medium capitalize text-slate-700 dark:text-slate-300">
+        {label}
+      </label>
       <input
         type="number"
         value={value}
@@ -214,7 +239,7 @@ function NumberField({
         max={max}
         step={step}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800"
+        className={INPUT_CLASS}
       />
     </div>
   )
