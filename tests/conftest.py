@@ -7,8 +7,20 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from seejob.api.app import create_app
+from seejob.core.config import get_settings
 from seejob.core.dependencies import get_session
 from seejob.models.base import Base
+
+
+@pytest.fixture(autouse=True)
+def force_test_llm_mock(monkeypatch):
+    """Use mock LLM in tests unless a test overrides env/key explicitly."""
+    monkeypatch.setenv("SEEJOB_ENV", "test")
+    monkeypatch.setenv("SEEJOB_ALLOW_MOCK_LLM", "true")
+    monkeypatch.setenv("SEEJOB_OPENAI_API_KEY", "")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 @pytest.fixture

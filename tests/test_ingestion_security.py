@@ -35,7 +35,7 @@ SAMPLE_CV = (FIXTURES / "sample_cv.txt").read_text(encoding="utf-8")
 
 @pytest.fixture
 def clear_settings_cache(monkeypatch):
-    monkeypatch.delenv("SEEJOB_OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("SEEJOB_OPENAI_API_KEY", "")
     monkeypatch.setenv("SEEJOB_ALLOW_MOCK_LLM", "false")
     get_settings.cache_clear()
     yield
@@ -85,7 +85,7 @@ def test_resolve_profile_extractor_requires_api_key(clear_settings_cache) -> Non
 
 
 def test_resolve_profile_extractor_allows_dev_mock(monkeypatch) -> None:
-    monkeypatch.delenv("SEEJOB_OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("SEEJOB_OPENAI_API_KEY", "")
     monkeypatch.setenv("SEEJOB_ALLOW_MOCK_LLM", "true")
     get_settings.cache_clear()
     extractor = resolve_profile_extractor()

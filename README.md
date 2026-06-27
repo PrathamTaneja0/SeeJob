@@ -126,6 +126,26 @@ npm run dev
 
 Open http://localhost:5173
 
+### Ingest a job by URL
+
+Add a single job posting to the review queue from the dashboard or API:
+
+1. **Profile** — create a profile under **Profiles** and optionally upload your master CV (used for fit scoring).
+2. **Job Queue** — open **Job Queue** in the sidebar and click **Ingest URL**.
+3. **Paste URL** — enter a public job posting URL (Greenhouse, Lever, company careers page, etc.) and click **Ingest**.
+4. **Review** — the job appears under **To Review** with source badge `ingest-url`. Open it to read the parsed JD and fit score.
+5. **Approve** — click **Approve** to create a pipeline application and queue tailored document generation.
+
+CLI/API equivalent:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/jobs/ingest-url \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com/jobs/senior-engineer", "person_id": 1}'
+```
+
+`person_id` is optional; when set, the job is scored against that profile immediately after ingest.
+
 **502 Bad Gateway on `/api/*`?** Vite proxies to `http://127.0.0.1:8000`. A 502 means the SeeJob API is not running or is on a different port. Fix:
 
 1. In a separate terminal, from the repo root: `seejob` (or `uvicorn seejob.api.app:app --host 127.0.0.1 --port 8000`)

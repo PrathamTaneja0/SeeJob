@@ -1,13 +1,13 @@
 """Application pipeline endpoints."""
 
 from datetime import UTC, datetime
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from seejob.core.config import get_settings
 from seejob.core.dependencies import get_session
 from seejob.models.application import Application, ApplicationStatus, DocumentType, GeneratedDocument
 from seejob.schemas.application import (
@@ -27,7 +27,7 @@ from seejob.schemas.application import (
 from seejob.services.auth import store_manual_otp
 from seejob.services.apply import ApplyError, run_application_apply
 from seejob.services.approval import ApprovalGateError, validate_approval_gates
-from seejob.services.documents import DocumentGenerationError, queue_document_generation
+from seejob.services.documents import DocumentGenerationError, ensure_document_pdf, queue_document_generation
 from seejob.services.interrupts import InterruptError, clear_interrupt, resume_from_interrupt
 from seejob.services.policy import get_policy_config
 from seejob.services.rate_limit import RateLimitExceeded
@@ -193,13 +193,17 @@ def get_application_documents(
     )
 
 
-@router.get("/{application_id}/documents/{doc_id}/download")
+@router.get(
+    "/{application_id}/documents/{doc_id}/download",
+    response_model=None,
+)
 def download_document(
     application_id: int,
     doc_id: int,
+    format: str = Query(default="pdf", pattern="^(pdf|md)$"),
     db: Session = Depends(get_session),
-) -> FileResponse:
-    """Download the generated PDF for an application document."""
+) -> FileResponse | Response:
+    """Download generated PDF or markdown for an application document."""
     app = db.scalar(
         select(Application)
         .where(Application.id == application_id)
@@ -211,18 +215,31 @@ def download_document(
     doc = next((d for d in app.documents if d.id == doc_id), None)
     if doc is None:
         raise HTTPException(status_code=404, detail=f"Document {doc_id} not found")
-    if not doc.pdf_path:
-        raise HTTPException(status_code=404, detail="PDF has not been generated for this document")
 
-    pdf_path = Path(doc.pdf_path)
-    if not pdf_path.is_file():
-        raise HTTPException(status_code=404, detail="PDF file not found on disk")
+    base_name = "cv" if doc.doc_type == DocumentType.CV else "cover_letter"
 
-    filename = "cv.pdf" if doc.doc_type == DocumentType.CV else "cover_letter.pdf"
+    if format == "md":
+        if not doc.markdown_content:
+            raise HTTPException(status_code=404, detail="Markdown has not been generated for this document")
+        return Response(
+            content=doc.markdown_content,
+            media_type="text/markdown; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{base_name}.md"'},
+        )
+
+    try:
+        pdf_path = ensure_document_pdf(doc, settings=get_settings())
+    except DocumentGenerationError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    if doc.pdf_path:
+        db.commit()
+
     return FileResponse(
         pdf_path,
         media_type="application/pdf",
-        filename=filename,
+        filename=f"{base_name}.pdf",
+        headers={"Content-Disposition": f'attachment; filename="{base_name}.pdf"'},
     )
 
 

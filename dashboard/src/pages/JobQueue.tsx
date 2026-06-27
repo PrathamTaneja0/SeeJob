@@ -1,15 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../api/client'
+import { api, ApiError } from '../api/client'
 import { ErrorState } from '../components/ErrorState'
 import { CardSkeleton } from '../components/LoadingSkeleton'
 import { SourceBadge } from '../components/SourceBadge'
 import { Button } from '../components/ui/Button'
+import { FormField } from '../components/ui/FormField'
 import { PageContainer } from '../components/ui/PageContainer'
 import { PageHeader } from '../components/ui/PageHeader'
 
 export function JobQueue() {
   const queryClient = useQueryClient()
+  const [ingestOpen, setIngestOpen] = useState(false)
+  const [ingestUrl, setIngestUrl] = useState('')
+  const [ingestMsg, setIngestMsg] = useState<{ text: string; ok: boolean } | null>(null)
 
   const { data: queue, isLoading, error, refetch } = useQuery({
     queryKey: ['jobQueue'],
@@ -38,6 +43,25 @@ export function JobQueue() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobQueue'] }),
   })
 
+  const ingestMutation = useMutation({
+    mutationFn: ({ url, personId }: { url: string; personId?: number }) =>
+      api.ingestJobUrl(url, personId),
+    onSuccess: (job) => {
+      setIngestMsg({
+        text: `Added "${job.title}" at ${job.company}${job.fit_score != null ? ` (${(job.fit_score * 100).toFixed(0)}% fit)` : ''}`,
+        ok: true,
+      })
+      setIngestUrl('')
+      queryClient.invalidateQueries({ queryKey: ['jobQueue'] })
+    },
+    onError: (err) => {
+      setIngestMsg({
+        text: err instanceof ApiError ? err.message : 'Failed to ingest URL',
+        ok: false,
+      })
+    },
+  })
+
   if (isLoading) return <CardSkeleton count={6} />
   if (error || !queue) {
     return (
@@ -55,11 +79,20 @@ export function JobQueue() {
     { key: 'applied', label: 'Applied', data: queue.applied },
   ]
 
+  const closeIngestModal = () => {
+    setIngestOpen(false)
+    setIngestMsg(null)
+    setIngestUrl('')
+  }
+
   return (
     <PageContainer>
       <PageHeader
         title="Job Queue"
         subtitle="Review discovered jobs and approve targeting for your profile. Jobs are added via manual POST, Ingest URL, RSS feeds (policy), or seejob-sourcing — not auto LinkedIn unless you configure RSS."
+        action={
+          <Button onClick={() => setIngestOpen(true)}>Ingest URL</Button>
+        }
       />
 
       {!defaultPersonId && (
@@ -157,6 +190,75 @@ export function JobQueue() {
           </section>
         ))}
       </div>
+
+      {ingestOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ingest-url-title"
+        >
+          <div className="w-full max-w-lg rounded-lg border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+            <h2
+              id="ingest-url-title"
+              className="text-lg font-semibold text-slate-900 dark:text-slate-100"
+            >
+              Ingest job URL
+            </h2>
+            <p className="mt-2 text-sm text-slate-500">
+              Paste a public job posting URL. SeeJob fetches the page, parses title/company/JD, and
+              adds it to the review queue
+              {defaultPersonId ? ' with fit scoring against your profile.' : '.'}
+            </p>
+
+            <form
+              className="mt-4 space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault()
+                const trimmed = ingestUrl.trim()
+                if (!trimmed) return
+                setIngestMsg(null)
+                ingestMutation.mutate({
+                  url: trimmed,
+                  personId: defaultPersonId,
+                })
+              }}
+            >
+              <FormField
+                label="Job posting URL"
+                type="url"
+                required
+                value={ingestUrl}
+                onChange={setIngestUrl}
+                placeholder="https://boards.example.com/jobs/12345"
+              />
+
+              {ingestMsg && (
+                <p
+                  className={`rounded-lg px-3 py-2 text-sm ${
+                    ingestMsg.ok
+                      ? 'border border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300'
+                      : 'border border-red-200 bg-red-50 text-red-800 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300'
+                  }`}
+                >
+                  {ingestMsg.text}
+                </p>
+              )}
+
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="secondary" onClick={closeIngestModal}>
+                  {ingestMsg?.ok ? 'Done' : 'Cancel'}
+                </Button>
+                {!ingestMsg?.ok && (
+                  <Button type="submit" disabled={ingestMutation.isPending || !ingestUrl.trim()}>
+                    {ingestMutation.isPending ? 'Fetching…' : 'Ingest'}
+                  </Button>
+                )}
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </PageContainer>
   )
 }

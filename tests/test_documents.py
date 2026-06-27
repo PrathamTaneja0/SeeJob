@@ -21,6 +21,7 @@ from seejob.services.documents import (
     build_profile_context,
     generate_application_documents,
     queue_document_generation,
+    sanitize_document_markdown,
     validate_document_truthfulness,
 )
 from seejob.services.pdf_export import markdown_to_pdf
@@ -166,6 +167,13 @@ async def test_generate_application_documents_creates_pdf_and_rows(
     assert all(doc.ats_score is not None for doc in result.documents)
     assert all(doc.approved is False for doc in result.documents)
     assert all(doc.pdf_path and Path(doc.pdf_path).exists() for doc in result.documents)
+
+    cv_doc = next(d for d in result.documents if d.doc_type == DocumentType.CV)
+    assert "Jane Applicant" in cv_doc.markdown_content
+    assert "<!--" not in cv_doc.markdown_content
+    assert "## ATS Revision" not in cv_doc.markdown_content
+    assert "## Experience" in cv_doc.markdown_content
+    assert "## Skills" in cv_doc.markdown_content
 
     types = {doc.doc_type for doc in result.documents}
     assert types == {DocumentType.CV, DocumentType.COVER_LETTER}
@@ -523,7 +531,7 @@ def test_cover_letter_passed_not_overridden_when_errors_exist() -> None:
 
 def test_resolve_document_generator_blocks_mock_in_production(monkeypatch) -> None:
     """Production must fail closed even when SEEJOB_ALLOW_MOCK_LLM is set."""
-    monkeypatch.delenv("SEEJOB_OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("SEEJOB_OPENAI_API_KEY", "")
     monkeypatch.setenv("SEEJOB_ALLOW_MOCK_LLM", "true")
     monkeypatch.setenv("SEEJOB_ENV", "production")
     get_settings.cache_clear()
@@ -536,7 +544,7 @@ def test_resolve_document_generator_blocks_mock_in_production(monkeypatch) -> No
 
 def test_resolve_document_generator_allows_mock_in_development(monkeypatch) -> None:
     """Development may use mock generator when explicitly enabled."""
-    monkeypatch.delenv("SEEJOB_OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("SEEJOB_OPENAI_API_KEY", "")
     monkeypatch.setenv("SEEJOB_ALLOW_MOCK_LLM", "true")
     monkeypatch.setenv("SEEJOB_ENV", "development")
     get_settings.cache_clear()
@@ -598,3 +606,31 @@ async def test_truthfulness_revalidated_after_ats_revision(
             generator=_FabricatingReviser(),
             settings=get_settings(),
         )
+
+
+def test_sanitize_document_markdown_strips_comments_and_ats_section() -> None:
+    raw = (
+        "# Jane Applicant\n\n"
+        "## Experience\n\n- Role at Acme\n\n"
+        "<!-- profile_len=1263 jd_len=216 -->\n\n"
+        "## ATS Revision\n\n- Addressed keyword gaps\n"
+    )
+    cleaned = sanitize_document_markdown(raw)
+    assert "<!--" not in cleaned
+    assert "## ATS Revision" not in cleaned
+    assert "# Jane Applicant" in cleaned
+
+
+@pytest.mark.asyncio
+async def test_mock_generator_uses_profile_name_not_placeholder() -> None:
+    profile = build_profile_context(
+        Person(
+            full_name="Alex Rivera",
+            email="alex@example.com",
+            work_authorization=WorkAuthorization.CITIZEN,
+        )
+    )
+    generator = MockDocumentGenerator()
+    cv = await generator.generate_cv(profile_context=profile, job_context="Title: Engineer\nCompany: Acme")
+    assert "# Alex Rivera" in cv
+    assert "Jane Applicant" not in cv

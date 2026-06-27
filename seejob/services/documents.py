@@ -31,8 +31,18 @@ logger = logging.getLogger(__name__)
 
 MAX_CRITIC_ITERATIONS = 3
 
-# Standalone calendar years only — avoids false positives on arbitrary 4-digit tokens
-# (e.g. profile_len=1263 in mock generator HTML comments).
+_HTML_COMMENT_RE = re.compile(r"<!--[\s\S]*?-->")
+_ATS_REVISION_SECTION_RE = re.compile(r"\n## ATS Revision\b[\s\S]*$", re.IGNORECASE)
+
+
+def sanitize_document_markdown(markdown: str) -> str:
+    """Remove HTML comments and accidental ATS revision blocks from document body."""
+    cleaned = _HTML_COMMENT_RE.sub("", markdown)
+    cleaned = _ATS_REVISION_SECTION_RE.sub("", cleaned)
+    return cleaned.strip()
+
+
+# Standalone calendar years only — avoids false positives on arbitrary 4-digit tokens.
 _PLAUSIBLE_YEAR = r"(?:19\d{2}|20[0-9]\d|2100)"
 _DATE_MENTION_PATTERN = re.compile(
     rf"\b((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+"
@@ -210,6 +220,7 @@ async def _run_critic_loop(
             job_context=job_context,
             revision_notes=last_result.revision_notes,
         )
+        current = sanitize_document_markdown(current)
         _assert_document_truthful(label, current, person)
         last_result = critique_document(
             current,
@@ -218,7 +229,33 @@ async def _run_critic_loop(
             min_score=min_score,
         )
 
+    current = sanitize_document_markdown(current)
     return current, last_result.score, last_result.to_report_json(), last_result.passed
+
+
+def ensure_document_pdf(
+    doc: GeneratedDocument,
+    *,
+    settings: Settings | None = None,
+) -> Path:
+    """Return PDF path, regenerating from markdown on disk if missing."""
+    cfg = settings or get_settings()
+    cfg.ensure_directories()
+
+    if doc.pdf_path:
+        existing = Path(doc.pdf_path)
+        if existing.is_file():
+            return existing
+
+    if not doc.markdown_content:
+        raise DocumentGenerationError("Document has no markdown content to export")
+
+    doc_dir = cfg.documents_dir / f"app_{doc.application_id}"
+    doc_dir.mkdir(parents=True, exist_ok=True)
+    filename = "cv.pdf" if doc.doc_type == DocumentType.CV else "cover_letter.pdf"
+    pdf_path = markdown_to_pdf(doc.markdown_content, doc_dir / filename)
+    doc.pdf_path = str(pdf_path)
+    return pdf_path
 
 
 async def generate_application_documents(
@@ -268,13 +305,17 @@ async def generate_application_documents(
     profile_context = build_profile_context(person, memory_chunks=memory_texts)
     job_context = build_job_context(job)
 
-    cv_markdown = await generator.generate_cv(
-        profile_context=profile_context,
-        job_context=job_context,
+    cv_markdown = sanitize_document_markdown(
+        await generator.generate_cv(
+            profile_context=profile_context,
+            job_context=job_context,
+        )
     )
-    cover_markdown = await generator.generate_cover_letter(
-        profile_context=profile_context,
-        job_context=job_context,
+    cover_markdown = sanitize_document_markdown(
+        await generator.generate_cover_letter(
+            profile_context=profile_context,
+            job_context=job_context,
+        )
     )
 
     for label, content in [("CV", cv_markdown), ("Cover letter", cover_markdown)]:

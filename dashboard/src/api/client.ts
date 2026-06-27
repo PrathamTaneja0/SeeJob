@@ -14,9 +14,7 @@ import type {
   RateLimits,
 } from './types'
 
-const API_BASE =
-  import.meta.env.VITE_API_URL?.replace(/\/$/, '') ||
-  (import.meta.env.DEV ? '' : 'http://127.0.0.1:8000')
+const API_BASE = import.meta.env.VITE_API_URL?.replace(/\/$/, '') ?? ''
 
 class ApiError extends Error {
   status: number
@@ -78,8 +76,53 @@ export const api = {
       body: JSON.stringify({ approved }),
     }),
 
-  documentDownloadUrl: (applicationId: number, docId: number) =>
-    `${API_BASE}/api/v1/applications/${applicationId}/documents/${docId}/download`,
+  documentDownloadUrl: (applicationId: number, docId: number, format: 'pdf' | 'md' = 'pdf') =>
+    `${API_BASE}/api/v1/applications/${applicationId}/documents/${docId}/download?format=${format}`,
+
+  async downloadDocument(
+    applicationId: number,
+    docId: number,
+    filenameBase: string,
+  ): Promise<void> {
+    const tryDownload = async (format: 'pdf' | 'md') => {
+      const url = `${API_BASE}/api/v1/applications/${applicationId}/documents/${docId}/download?format=${format}`
+      const res = await fetch(url)
+      if (!res.ok) {
+        let detail = res.statusText
+        try {
+          const body = await res.json()
+          detail = body.detail ?? detail
+        } catch {
+          /* ignore */
+        }
+        throw new ApiError(String(detail), res.status)
+      }
+      const blob = await res.blob()
+      const ext = format === 'pdf' ? 'pdf' : 'md'
+      const objectUrl = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = objectUrl
+      anchor.download = `${filenameBase}.${ext}`
+      anchor.click()
+      URL.revokeObjectURL(objectUrl)
+    }
+
+    try {
+      await tryDownload('pdf')
+    } catch (err) {
+      if (err instanceof ApiError && (err.status === 404 || err.status === 409)) {
+        await tryDownload('md')
+        return
+      }
+      throw err
+    }
+  },
+
+  ingestJobUrl: (url: string, personId?: number) =>
+    request<Job>('/api/v1/jobs/ingest-url', {
+      method: 'POST',
+      body: JSON.stringify({ url, person_id: personId ?? null }),
+    }),
 
   applyApplication: (
     id: number,

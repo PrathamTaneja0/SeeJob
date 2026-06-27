@@ -18,6 +18,7 @@ export function ApplicationDetail() {
   const appId = Number(id)
   const queryClient = useQueryClient()
   const [applyResult, setApplyResult] = useState<string | null>(null)
+  const [downloadMsg, setDownloadMsg] = useState<string | null>(null)
 
   const { data: app, isLoading, error, refetch } = useQuery({
     queryKey: ['application', appId],
@@ -171,6 +172,12 @@ export function ApplicationDetail() {
         </Link>
       </div>
 
+      {downloadMsg && (
+        <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
+          {downloadMsg}
+        </p>
+      )}
+
       <section className="space-y-6">
         <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
           Generated Documents
@@ -197,17 +204,51 @@ export function ApplicationDetail() {
                     )}
                   </div>
                   <div className="flex gap-2">
-                    {(doc.pdf_path || doc.id) && (
-                      <a
-                        href={api.documentDownloadUrl(appId, doc.id)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <Button variant="secondary" size="sm">
-                          Download PDF
-                        </Button>
-                      </a>
-                    )}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={async () => {
+                        setDownloadMsg(null)
+                        const base =
+                          doc.doc_type === 'cv' ? 'cv' : 'cover_letter'
+                        try {
+                          await api.downloadDocument(appId, doc.id, base)
+                        } catch (err) {
+                          setDownloadMsg(
+                            err instanceof Error ? err.message : 'Download failed',
+                          )
+                        }
+                      }}
+                    >
+                      Download PDF
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={async () => {
+                        setDownloadMsg(null)
+                        const base =
+                          doc.doc_type === 'cv' ? 'cv' : 'cover_letter'
+                        try {
+                          const url = api.documentDownloadUrl(appId, doc.id, 'md')
+                          const res = await fetch(url)
+                          if (!res.ok) throw new Error('Markdown download failed')
+                          const blob = await res.blob()
+                          const objectUrl = URL.createObjectURL(blob)
+                          const anchor = document.createElement('a')
+                          anchor.href = objectUrl
+                          anchor.download = `${base}.md`
+                          anchor.click()
+                          URL.revokeObjectURL(objectUrl)
+                        } catch (err) {
+                          setDownloadMsg(
+                            err instanceof Error ? err.message : 'Download failed',
+                          )
+                        }
+                      }}
+                    >
+                      Download .md
+                    </Button>
                     {!doc.approved && (
                       <Button
                         variant="success"

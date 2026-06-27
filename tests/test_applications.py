@@ -209,5 +209,42 @@ def test_download_document_pdf(client, db_session, tmp_path) -> None:
     response = client.get(f"/api/v1/applications/{app.id}/documents/{doc.id}/download")
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/pdf"
+    assert "attachment" in response.headers.get("content-disposition", "")
     assert response.content.startswith(b"%PDF")
+
+
+def test_download_document_regenerates_missing_pdf(client, db_session, tmp_path, monkeypatch) -> None:
+    """Missing PDF on disk is regenerated from stored markdown."""
+    monkeypatch.setenv("SEEJOB_DOCUMENTS_DIR", str(tmp_path / "docs"))
+    from seejob.core.config import get_settings
+
+    get_settings.cache_clear()
+
+    _seed_policy(db_session)
+    app = _seed_application(db_session, doc_approved=False)
+    doc = db_session.query(GeneratedDocument).filter_by(application_id=app.id).one()
+    doc.pdf_path = str(tmp_path / "missing.pdf")
+    doc.markdown_content = "# Alex Rivera\n\n## Experience\n\n- Engineer at Acme Corp"
+    db_session.commit()
+
+    response = client.get(f"/api/v1/applications/{app.id}/documents/{doc.id}/download")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content.startswith(b"%PDF")
+
+
+def test_download_document_markdown(client, db_session) -> None:
+    """GET download?format=md returns markdown attachment."""
+    _seed_policy(db_session)
+    app = _seed_application(db_session, doc_approved=False)
+    doc = db_session.query(GeneratedDocument).filter_by(application_id=app.id).one()
+    doc.markdown_content = "# Alex Rivera\n\n## Skills\n\n- Python"
+    db_session.commit()
+
+    response = client.get(
+        f"/api/v1/applications/{app.id}/documents/{doc.id}/download?format=md"
+    )
+    assert response.status_code == 200
+    assert "text/markdown" in response.headers["content-type"]
+    assert "Alex Rivera" in response.text
 
